@@ -2,7 +2,7 @@
 
 Web interface for Linux Lab, a platform for learning Linux by solving problems in a real terminal, inside an isolated environment created for each student.
 
-This repository holds the frontend: authentication, progress dashboard, mission page and terminal. The API, labs, validation and mission content live in `linux-lab-api`.
+This repository holds the frontend: authentication, progress dashboard, mission page and terminal. The API, labs, validation and mission content live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
 
 ## Why
 
@@ -30,7 +30,7 @@ The interface text is in Portuguese.
 
 ## Terminal
 
-The client implements the protocol defined in `docs/api.md` in `linux-lab-api`:
+The client implements the protocol defined in [docs/api.md](https://github.com/FranciscoPedro06/linux-lab-api/blob/main/docs/api.md) in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api):
 
 - binary frames for terminal bytes, JSON for control messages (`init`, `resize`);
 - debounced resize;
@@ -60,7 +60,7 @@ There is no code yet. Setup instructions will be added with the first increment.
 Expected requirements:
 
 - Node.js 22 or later
-- `linux-lab-api` running locally. The Vite dev server proxies `/api` and `/ws` to the API, keeping the same-origin setup used in production.
+- [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api) running locally. The Vite dev server proxies `/api` and `/ws` to the API, keeping the same-origin setup used in production.
 
 ## Tests
 
@@ -70,7 +70,7 @@ Expected requirements:
 
 ## Status
 
-The architecture is defined and implementation has not started. Development order follows `linux-lab-api`: the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
+The architecture is defined and implementation has not started. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
 
 ## License
 
