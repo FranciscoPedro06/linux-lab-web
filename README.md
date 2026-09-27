@@ -55,22 +55,37 @@ No component library. The interface is small and the terminal takes most of the 
 
 ## Running
 
-There is no code yet. Setup instructions will be added with the first increment.
+The full local environment (PostgreSQL, API and this dev server) is started from [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api) with Docker Compose, with both repositories cloned side by side. See its README.
 
-Expected requirements:
+To run only the frontend, with Node.js 22 or later:
 
-- Node.js 22 or later
-- [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api) running locally. The Vite dev server proxies `/api` and `/ws` to the API, keeping the same-origin setup used in production.
+```sh
+npm ci
+npm run dev
+```
+
+The Vite dev server proxies `/api` and `/ws` to `http://localhost:8000`, keeping the same-origin setup used in production. Set `API_PROXY_TARGET` to point it elsewhere. Open http://localhost:5173.
+
+There is no Dockerfile. In production the built files are served by Caddy, configured in `linux-lab-api`.
 
 ## Tests
 
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+CI runs the same commands.
+
 - **Vitest:** isolated logic, mainly the terminal client (protocol, reconnect, close codes).
-- **Playwright:** one end-to-end flow against the real API: sign-up, starting a lab, running a command and validating the first mission.
-- **TypeScript** in strict mode as a CI check.
+- **Playwright:** planned; one end-to-end flow against the real API: sign-up, starting a lab, running a command and validating the first mission.
+- **TypeScript** in strict mode.
 
 ## Status
 
-The architecture is defined and implementation has not started. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
+Increment 01 is done: Vite, React and TypeScript setup, a minimal home page that reports API health, and CI. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
 
 ## License
 
