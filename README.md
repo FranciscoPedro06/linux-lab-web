@@ -2,7 +2,7 @@
 
 Web interface for Linux Lab, a platform for learning Linux by solving problems in a real terminal, inside an isolated environment created for each student.
 
-This repository holds the frontend: authentication, progress dashboard, mission page and terminal. The API, labs, validation and mission content live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
+This repository holds the frontend. Today it contains the lab terminal page; authentication, the progress dashboard and mission pages are planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
 
 ## Why
 
@@ -10,17 +10,19 @@ Learning Linux by typing whatever command each lesson names trains syntax recall
 
 ## How it works
 
-- The student logs in and sees modules and missions with their progress.
-- On a mission page, they read the problem and start the lab.
-- The terminal is xterm.js connected over WebSocket to a `bash` shell inside the student's container. Nothing is emulated in the browser.
-- Validate asks the API to check the lab state and shows the result of each condition.
-- Reset recreates the environment in the mission's initial state.
+- The page `/?lab=<lab id>` opens a terminal on an existing lab.
+- The terminal is xterm.js connected over WebSocket to a `bash` shell inside the lab container. Nothing is emulated in the browser.
+- The page shows the connection state and lets the user close the terminal and reconnect. The lab reset button is shown disabled.
 
-The frontend stores no tokens. The session is an `HttpOnly` cookie set by the API, and frontend and API are served from the same origin.
+Frontend and API are served from the same origin. There is no login yet; when it exists, the session will be an `HttpOnly` cookie set by the API and the frontend will store no tokens.
+
+Planned, not implemented yet: login, modules and missions with progress, validation of the lab state and lab reset.
 
 The interface text is in Portuguese.
 
 ## Pages
+
+Planned pages:
 
 | Route | Contents |
 |---|---|
@@ -28,7 +30,7 @@ The interface text is in Portuguese.
 | `/` | Overall progress, modules and missions with their status |
 | `/missions/:slug` | Problem, objectives and hints; terminal; lab state; validation, reset, and the explanation after completion |
 
-These are the planned pages. Today there is one: `/?lab=<lab id>` opens the terminal of a lab created with the development command described in `linux-lab-api`.
+Today there is one page: `/?lab=<lab id>` opens the terminal of a lab created with the development command described in `linux-lab-api`.
 
 ## Terminal
 
