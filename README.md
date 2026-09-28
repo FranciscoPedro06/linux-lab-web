@@ -28,16 +28,17 @@ The interface text is in Portuguese.
 | `/` | Overall progress, modules and missions with their status |
 | `/missions/:slug` | Problem, objectives and hints; terminal; lab state; validation, reset, and the explanation after completion |
 
+These are the planned pages. Today there is one: `/?lab=<lab id>` opens the terminal of a lab created with the development command described in `linux-lab-api`.
+
 ## Terminal
 
-The client implements the protocol defined in [docs/api.md](https://github.com/FranciscoPedro06/linux-lab-api/blob/main/docs/api.md) in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api):
+The client implements the protocol described in [docs/terminal.md](https://github.com/FranciscoPedro06/linux-lab-api/blob/main/docs/terminal.md) in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api):
 
 - binary frames for terminal bytes, JSON for control messages (`init`, `resize`);
-- debounced resize;
-- reconnect with backoff after a dropped connection;
-- handling of close codes: shell exited, terminal opened in another tab, lab ended, invalid session.
+- the terminal is sized to its container with the fit addon, and resizes are debounced;
+- close codes are shown as a reason next to the connection status: shell exited, terminal opened in another tab, lab unavailable, server error, connection lost.
 
-Each reconnect opens a new shell in the same lab. Files and background processes are still there.
+`src/terminal/connection.ts` holds the protocol and `src/terminal/Terminal.tsx` connects it to xterm.js. After a disconnect the page offers to reconnect; automatic reconnection with backoff is planned. Each reconnect opens a new shell in the same lab.
 
 ## Stack
 
@@ -64,7 +65,7 @@ npm ci
 npm run dev
 ```
 
-The Vite dev server proxies `/api` and `/ws` to `http://localhost:8000`, keeping the same-origin setup used in production. Set `API_PROXY_TARGET` to point it elsewhere. Open http://localhost:5173.
+The Vite dev server proxies `/api` and `/ws` to `http://localhost:8000`, keeping the same-origin setup used in production. Set `API_PROXY_TARGET` to point it elsewhere, and `DEV_WATCH_POLLING=true` where file change events do not arrive (the Compose environment sets it). Open http://localhost:5173/?lab=<lab id>.
 
 There is no Dockerfile. In production the built files are served by Caddy, configured in `linux-lab-api`.
 
@@ -79,13 +80,13 @@ npm run build
 
 CI runs the same commands.
 
-- **Vitest:** isolated logic, mainly the terminal client (protocol, reconnect, close codes).
-- **Playwright:** planned; one end-to-end flow against the real API: sign-up, starting a lab, running a command and validating the first mission.
+- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket, and the terminal component and page in jsdom with xterm.js replaced by a recorder.
+- **Playwright:** planned; one end-to-end flow against the real API.
 - **TypeScript** in strict mode.
 
 ## Status
 
-Increment 01 is done: Vite, React and TypeScript setup, a minimal home page that reports API health, and CI. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
+Increments 01 and 03 are done here: Vite, React and TypeScript setup with CI, then the terminal page with xterm.js. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
 
 ## License
 
