@@ -1,34 +1,73 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import styles from './App.module.css'
+import type { ConnectionStatus } from './terminal/connection.ts'
+import { Terminal } from './terminal/Terminal.tsx'
 
-type ApiStatus = 'checking' | 'ok' | 'unavailable'
+const stateLabel: Record<ConnectionStatus['state'], string> = {
+  connecting: 'Conectando',
+  connected: 'Conectado',
+  closed: 'Desconectado',
+}
 
-const statusLabel: Record<ApiStatus, string> = {
-  checking: 'verificando',
-  ok: 'disponível',
-  unavailable: 'indisponível',
+function labFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get('lab')
 }
 
 export function App() {
-  const [apiStatus, setApiStatus] = useState<ApiStatus>('checking')
+  const [labId] = useState(labFromUrl)
+  const [status, setStatus] = useState<ConnectionStatus>({ state: 'connecting' })
+  const [session, setSession] = useState(0)
+  const [closeRequested, setCloseRequested] = useState(false)
 
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch('/api/health', { signal: controller.signal })
-      .then((response) => setApiStatus(response.ok ? 'ok' : 'unavailable'))
-      .catch(() => {
-        if (!controller.signal.aborted) setApiStatus('unavailable')
-      })
-    return () => controller.abort()
+  const reconnect = useCallback(() => {
+    setCloseRequested(false)
+    setStatus({ state: 'connecting' })
+    setSession((value) => value + 1)
   }, [])
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>Linux Lab</h1>
-      <p className={styles.lead}>Aprenda Linux resolvendo problemas em um terminal real.</p>
-      <p className={styles.status}>
-        API: <span data-status={apiStatus}>{statusLabel[apiStatus]}</span>
-      </p>
+      <header className={styles.header}>
+        <h1 className={styles.title}>Linux Lab</h1>
+        {labId && (
+          <p className={styles.status} role="status">
+            Estado: <span data-state={status.state}>{stateLabel[status.state]}</span>
+            {status.reason && <span className={styles.reason}> — {status.reason}</span>}
+          </p>
+        )}
+      </header>
+
+      {labId ? (
+        <>
+          <section className={styles.workspace}>
+            <Terminal
+              labId={labId}
+              session={session}
+              closeRequested={closeRequested}
+              onStatus={setStatus}
+            />
+          </section>
+          <footer className={styles.actions}>
+            <button type="button" disabled title="Disponível quando os laboratórios tiverem sessões">
+              Reiniciar laboratório
+            </button>
+            {status.state === 'closed' ? (
+              <button type="button" onClick={reconnect}>
+                Reconectar
+              </button>
+            ) : (
+              <button type="button" onClick={() => setCloseRequested(true)}>
+                Encerrar
+              </button>
+            )}
+          </footer>
+        </>
+      ) : (
+        <p className={styles.empty}>
+          Nenhum laboratório selecionado. Abra esta página com <code>?lab=</code> seguido do
+          identificador do laboratório.
+        </p>
+      )}
     </main>
   )
 }

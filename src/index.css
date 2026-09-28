@@ -2,6 +2,8 @@
   --bg: #fafafa;
   --text: #1a1a1a;
   --text-muted: #5c5c5c;
+  --surface: #ffffff;
+  --border: #d4d4d4;
   --ok: #1f7a3a;
   --error: #b42318;
   --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -15,6 +17,8 @@
     --bg: #111213;
     --text: #e6e6e6;
     --text-muted: #9a9a9a;
+    --surface: #1c1e20;
+    --border: #34373a;
     --ok: #5cc27a;
     --error: #f07064;
   }
