@@ -53,7 +53,7 @@ export class TerminalConnection {
     this.socket = socketFactory(url)
     this.socket.binaryType = 'arraybuffer'
     this.socket.onopen = () => {
-      this.socket.send(JSON.stringify({ type: 'init', ...size }))
+      this.socket.send(JSON.stringify({ type: 'init', cols: size.cols, rows: size.rows }))
     }
     this.socket.onmessage = (event: MessageEvent<ArrayBuffer | string>) => this.receive(event.data)
     this.socket.onclose = (event: CloseEvent) => this.closed(event.code)
@@ -68,7 +68,7 @@ export class TerminalConnection {
 
   resize(size: TerminalSize): void {
     if (this.state === 'connected') {
-      this.socket.send(JSON.stringify({ type: 'resize', ...size }))
+      this.socket.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }))
     }
   }
 

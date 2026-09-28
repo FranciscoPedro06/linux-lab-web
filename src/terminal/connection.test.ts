@@ -73,6 +73,16 @@ describe('TerminalConnection', () => {
     expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: 'resize', cols: 120, rows: 32 }))
   })
 
+  it('sends only the protocol fields, whatever the size object carries', () => {
+    const { connection, socket } = connect()
+    socket.ready()
+    const size = { cols: 120, rows: 32, pixelWidth: 960 }
+
+    connection.resize(size)
+
+    expect(JSON.parse(socket.sent.at(-1) as string)).toEqual({ type: 'resize', cols: 120, rows: 32 })
+  })
+
   it.each([
     [4404, 'Laboratório indisponível.'],
     [4409, 'O terminal foi aberto em outra aba.'],
