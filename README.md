@@ -2,7 +2,7 @@
 
 Web interface for Linux Lab, a platform for learning Linux by solving problems in a real terminal, inside an isolated environment created for each student.
 
-This repository holds the frontend. Today it contains the lab terminal page; authentication, the progress dashboard and mission pages are planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
+This repository holds the frontend. Today it contains login, sign-up and the lab terminal page; the progress dashboard and mission pages are planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
 
 ## Why
 
@@ -10,27 +10,36 @@ Learning Linux by typing whatever command each lesson names trains syntax recall
 
 ## How it works
 
+- `/login` and `/signup` create a session; `/` shows whether the user is signed in and lets them log out.
 - The page `/?lab=<lab id>` opens a terminal on an existing lab.
 - The terminal is xterm.js connected over WebSocket to a `bash` shell inside the lab container. Nothing is emulated in the browser.
 - The page shows the connection state and lets the user close the terminal and reconnect. The lab reset button is shown disabled.
 
-Frontend and API are served from the same origin. There is no login yet; when it exists, the session will be an `HttpOnly` cookie set by the API and the frontend will store no tokens.
+Frontend and API are served from the same origin. The session is an `HttpOnly` cookie set by the API; the frontend never sees the token and stores nothing about the session in `localStorage` or `sessionStorage`.
 
-Planned, not implemented yet: login, modules and missions with progress, validation of the lab state and lab reset.
+Planned, not implemented yet: modules and missions with progress, labs tied to the account, validation of the lab state and lab reset.
 
 The interface text is in Portuguese.
 
 ## Pages
 
-Planned pages:
+| Route | Contents | Status |
+|---|---|---|
+| `/login` | Email and password | Implemented |
+| `/signup` | Name, email, password and invite code (required during the closed beta) | Implemented |
+| `/` | Entry page: loading, signed out (links to login and sign-up), signed in (name and logout), or an error with retry | Implemented; replaced by the dashboard with modules and progress later |
+| `/?lab=<lab id>` | Terminal of a lab created with the development command described in `linux-lab-api`. Needs no account, since labs are not tied to users yet | Development only |
+| `/missions/:slug` | Problem, objectives and hints; terminal; lab state; validation, reset, and the explanation after completion | Planned |
 
-| Route | Contents |
-|---|---|
-| `/login`, `/signup` | Authentication. Sign-up requires an invite code during the closed beta |
-| `/` | Overall progress, modules and missions with their status |
-| `/missions/:slug` | Problem, objectives and hints; terminal; lab state; validation, reset, and the explanation after completion |
+Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` is sent to `/`.
 
-Today there is one page: `/?lab=<lab id>` opens the terminal of a lab created with the development command described in `linux-lab-api`.
+## Authentication
+
+`src/auth/api.ts` calls the endpoints described in [docs/api.md](https://github.com/FranciscoPedro06/linux-lab-api/blob/main/docs/api.md) in `linux-lab-api` with `fetch` and `credentials: 'same-origin'`. Every non-GET request is sent as JSON, which the API requires together with an allowed `Origin`. Errors arrive as `{ "error": { "code", "message" } }`; the message, already in Portuguese, is shown as it is.
+
+`src/auth/session.ts` keeps the current user in a TanStack Query query on `/api/auth/me`, with four states: loading, signed in, signed out (the API answered `401`) and error. Login, sign-up and logout update that query instead of storing anything themselves.
+
+The session cookie is `Secure`. During development, browsers that treat `http://localhost` as a secure context, such as Chrome, Edge and Firefox, accept it; a browser that does not will not keep the session.
 
 ## Terminal
 
@@ -82,13 +91,13 @@ npm run build
 
 CI runs the same commands.
 
-- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket, and the terminal component and page in jsdom with xterm.js replaced by a recorder.
+- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the terminal component and page in jsdom with xterm.js replaced by a recorder; the authentication client, and the login, sign-up and entry pages against a fake `fetch`.
 - **Playwright:** planned; one end-to-end flow against the real API.
 - **TypeScript** in strict mode.
 
 ## Status
 
-Increments 01 and 03 are done here: Vite, React and TypeScript setup with CI, then the terminal page with xterm.js. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
+Increments 01, 03 and 04 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, then login and sign-up. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
 
 ## License
 
