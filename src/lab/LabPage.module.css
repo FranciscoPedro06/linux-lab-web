@@ -68,7 +68,3 @@
   color: var(--text-muted);
   cursor: not-allowed;
 }
-
-.empty {
-  color: var(--text-muted);
-}
