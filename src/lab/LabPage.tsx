@@ -38,7 +38,9 @@ function LabView({ labId }: { labId: string }) {
   }, [unauthorized, recheckSession])
 
   if (lab.isPending) return <Message text="Carregando o laboratório…" />
-  if (lab.isError) {
+  // A failed refresh keeps showing the lab as last reported; only a lab never
+  // loaded shows the error.
+  if (lab.isError && lab.data === undefined) {
     if (lab.error.status === 404) return <Message text="Laboratório não encontrado." alert />
     return <Message text={lab.error.message} alert retry={() => void lab.refetch()} />
   }
