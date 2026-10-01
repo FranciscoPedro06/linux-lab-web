@@ -2,7 +2,7 @@
 
 Web interface for Linux Lab, a platform for learning Linux by solving problems in a real terminal, inside an isolated environment created for each student.
 
-This repository holds the frontend. Today it contains login, sign-up and the lab terminal page; the progress dashboard and mission pages are planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
+This repository holds the frontend. Today it contains login, sign-up, the signed-in home with the user's lab, and the lab page with its terminal; the progress dashboard and mission pages are planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
 
 ## Why
 
@@ -10,14 +10,14 @@ Learning Linux by typing whatever command each lesson names trains syntax recall
 
 ## How it works
 
-- `/login` and `/signup` create a session; `/` shows whether the user is signed in and lets them log out.
-- The page `/?lab=<lab id>` opens a terminal on an existing lab.
-- The terminal is xterm.js connected over WebSocket to a `bash` shell inside the lab container. Nothing is emulated in the browser.
-- The page shows the connection state and lets the user close the terminal and reconnect. The lab reset button is shown disabled.
+- `/login` and `/signup` create a session; `/` shows the signed-in user's lab and lets them log out.
+- From `/` the user starts a lab, follows it while it is prepared, opens its terminal or ends it, and sees why previous labs ended (for example, running out of memory).
+- `/labs/:id` shows the lab as the API reports it and opens the terminal only while the lab is ready. The terminal is xterm.js connected over WebSocket to a `bash` shell inside the lab container. Nothing is emulated in the browser.
+- Logging out ends the user's lab on the server.
 
 Frontend and API are served from the same origin. The session is an `HttpOnly` cookie set by the API; the frontend never sees the token and stores nothing about the session in `localStorage` or `sessionStorage`.
 
-Planned, not implemented yet: modules and missions with progress, labs tied to the account, validation of the lab state and lab reset.
+Planned, not implemented yet: modules and missions with progress, validation of the lab state and lab reset.
 
 The interface text is in Portuguese.
 
@@ -27,11 +27,11 @@ The interface text is in Portuguese.
 |---|---|---|
 | `/login` | Email and password | Implemented |
 | `/signup` | Name, email, password and invite code (required during the closed beta) | Implemented |
-| `/` | Entry page: loading, signed out (links to login and sign-up), signed in (name and logout), or an error with retry | Implemented; replaced by the dashboard with modules and progress later |
-| `/?lab=<lab id>` | Terminal of a lab created with the development command described in `linux-lab-api`. Needs no account, since labs are not tied to users yet | Development only |
+| `/` | Signed out: links to login and sign-up. Signed in: the current lab (start, preparing, ready with a link to its terminal and an end button, ending), previous labs with their end reason, and logout | Implemented; becomes the dashboard with modules and progress later |
+| `/labs/:id` | The lab's state from the API: preparing, ready with the terminal, or ended with the reason and a button to start a new lab. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
 | `/missions/:slug` | Problem, objectives and hints; terminal; lab state; validation, reset, and the explanation after completion | Planned |
 
-Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` is sent to `/`.
+Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` is sent to `/`; a signed-out visitor who opens `/labs/:id` is sent to `/login`. The old development entry `/?lab=<id>` no longer opens anything.
 
 ## Authentication
 
@@ -41,15 +41,29 @@ Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` 
 
 The session cookie is `Secure`. During development, browsers that treat `http://localhost` as a secure context, such as Chrome, Edge and Firefox, accept it; a browser that does not will not keep the session.
 
+## Labs
+
+`src/lab/api.ts` calls the lab endpoints; `src/lab/queries.ts` keeps them in TanStack Query. The API owns the lifecycle: the client never decides a lab's state, it shows what `GET /api/labs/current` and `GET /api/labs/{id}` report. It polls every second while a lab is `provisioning` or `terminating`, and every 15 seconds while it is `ready`, since the server can end it (timeouts, OOM) at any time. Logout removes every cached lab.
+
 ## Terminal
 
 The client implements the protocol described in [docs/terminal.md](https://github.com/FranciscoPedro06/linux-lab-api/blob/main/docs/terminal.md) in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api):
 
+- the session cookie goes with the WebSocket handshake; the page never sees it;
 - binary frames for terminal bytes, JSON for control messages (`init`, `resize`);
 - the terminal is sized to its container with the fit addon, and resizes are debounced;
-- close codes are shown as a reason next to the connection status: shell exited, terminal opened in another tab, lab unavailable, server error, connection lost.
+- close codes reach the page with a reason shown next to the connection status.
 
-`src/terminal/connection.ts` holds the protocol and `src/terminal/Terminal.tsx` connects it to xterm.js. After a disconnect the page offers to reconnect; automatic reconnection with backoff is planned. Each reconnect opens a new shell in the same lab.
+`src/terminal/connection.ts` holds the protocol, `src/terminal/Terminal.tsx` connects it to xterm.js, and `src/terminal/reconnect.ts` decides about reconnecting:
+
+| Close code | What the page does |
+|---|---|
+| 4401 | Checks the session again; a signed-out user is sent to login |
+| 4404, 4410 | Reads the lab from the API and shows its state and end reason |
+| 4409, 4000, 1000, 1008, 1009 | Shows the reason and a Reconnect button; no automatic reconnection |
+| 1001, 1006, 1011, 1012, 1013, 1014 | Reconnects automatically after 1, 2, 4, 8 and 16 seconds, at most 5 times, each time only if the API still reports the lab `ready`; then stops and offers Reconnect |
+
+Each reconnect opens a new shell in the same lab.
 
 ## Stack
 
@@ -76,7 +90,7 @@ npm ci
 npm run dev
 ```
 
-The Vite dev server proxies `/api` and `/ws` to `http://localhost:8000`, keeping the same-origin setup used in production. Set `API_PROXY_TARGET` to point it elsewhere, and `DEV_WATCH_POLLING=true` where file change events do not arrive (the Compose environment sets it). Open http://localhost:5173/?lab=<lab id>.
+The Vite dev server proxies `/api` and `/ws` to `http://localhost:8000`, keeping the same-origin setup used in production. Set `API_PROXY_TARGET` to point it elsewhere, and `DEV_WATCH_POLLING=true` where file change events do not arrive (the Compose environment sets it). Open http://localhost:5173, sign up and start a lab.
 
 There is no Dockerfile. In production the built files are served by Caddy, configured in `linux-lab-api`.
 
@@ -91,13 +105,13 @@ npm run build
 
 CI runs the same commands.
 
-- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the terminal component and page in jsdom with xterm.js replaced by a recorder; the authentication client, and the login, sign-up and entry pages against a fake `fetch`.
-- **Playwright:** planned; one end-to-end flow against the real API.
+- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home and lab pages against a fake `fetch`, including lab states, OOM, 4401, 4410 and automatic reconnection with fake timers.
+- **Browser:** each increment is checked by hand in Chromium (Playwright) against the Compose environment, with real cookies, WebSocket and Docker; an automated end-to-end suite is planned.
 - **TypeScript** in strict mode.
 
 ## Status
 
-Increments 01, 03 and 04 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, then login and sign-up. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
+Increments 01 and 03 to 05 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, then labs tied to the account with their lifecycle and terminal reconnection. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, validation and progress in 08 and 09.
 
 ## License
 
