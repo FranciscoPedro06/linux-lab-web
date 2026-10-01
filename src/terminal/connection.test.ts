@@ -84,15 +84,17 @@ describe('TerminalConnection', () => {
   })
 
   it.each([
-    [4404, 'Laboratório indisponível.'],
+    [4401, 'Sua sessão expirou. Entre novamente.'],
+    [4404, 'Laboratório não encontrado.'],
     [4409, 'O terminal foi aberto em outra aba.'],
+    [4410, 'O laboratório foi encerrado.'],
     [1011, 'O terminal parou inesperadamente.'],
     [1006, 'A conexão com o laboratório caiu.'],
   ])('explains close code %i', (code, reason) => {
     const { socket, statuses } = connect()
     socket.ready()
     socket.serverClose(code)
-    expect(statuses.at(-1)).toEqual({ state: 'closed', reason })
+    expect(statuses.at(-1)).toEqual({ state: 'closed', reason, code })
   })
 
   it('reports the shell exit code', () => {
@@ -104,6 +106,7 @@ describe('TerminalConnection', () => {
     expect(statuses.at(-1)).toEqual({
       state: 'closed',
       reason: 'A sessão do shell terminou (código 2).',
+      code: 4000,
     })
   })
 

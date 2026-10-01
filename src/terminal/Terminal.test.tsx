@@ -97,10 +97,11 @@ describe('Terminal', () => {
     socket.ready()
     expect(onStatus).toHaveBeenLastCalledWith({ state: 'connected' })
 
-    socket.serverClose(4404)
+    socket.serverClose(4410)
     expect(onStatus).toHaveBeenLastCalledWith({
       state: 'closed',
-      reason: 'Laboratório indisponível.',
+      reason: 'O laboratório foi encerrado.',
+      code: 4410,
     })
   })
 

@@ -9,6 +9,8 @@ export type ConnectionStatus = {
   state: ConnectionState
   // Why the connection ended, in the interface language. Absent while open.
   reason?: string
+  // The WebSocket close code, once closed. The page decides what to do with it.
+  code?: number
 }
 
 export type ConnectionHandlers = {
@@ -29,8 +31,10 @@ const closeReasons: Record<number, string> = {
   1009: 'Mensagem grande demais.',
   1011: 'O terminal parou inesperadamente.',
   4000: 'A sessão do shell terminou.',
-  4404: 'Laboratório indisponível.',
+  4401: 'Sua sessão expirou. Entre novamente.',
+  4404: 'Laboratório não encontrado.',
   4409: 'O terminal foi aberto em outra aba.',
+  4410: 'O laboratório foi encerrado.',
 }
 
 export function terminalUrl(labId: string, location: Location = window.location): string {
@@ -99,6 +103,6 @@ export class TerminalConnection {
     if (code === 4000 && this.exitCode !== undefined && this.exitCode !== null) {
       reason = `A sessão do shell terminou (código ${this.exitCode}).`
     }
-    this.handlers.onStatus({ state: 'closed', reason })
+    this.handlers.onStatus({ state: 'closed', reason, code })
   }
 }
