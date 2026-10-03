@@ -89,6 +89,22 @@ describe('lab page', () => {
     expect(await screen.findByTestId('terminal', {}, { timeout: 3000 })).toBeTruthy()
   })
 
+  it('follows a lab being ended until it is terminated', async () => {
+    let status: 'terminating' | 'terminated' = 'terminating'
+    api.routes[`GET /api/labs/${labId}`] = () =>
+      Response.json(lab({ status, end_reason: 'max_lifetime', ended_at: 'x' }))
+    renderAt(path)
+
+    expect(await screen.findByText('Encerrando')).toBeTruthy()
+    expect(screen.queryByTestId('terminal')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Iniciar novo laboratório' })).toBeNull()
+    status = 'terminated'
+
+    expect(await screen.findByText('Encerrado', {}, { timeout: 3000 })).toBeTruthy()
+    expect(screen.getByText(/tempo máximo de 2 horas/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Iniciar novo laboratório' })).toBeTruthy()
+  })
+
   it('explains that the lab ran out of memory', async () => {
     api.routes[`GET /api/labs/${labId}`] = () =>
       Response.json(lab({ status: 'terminated', end_reason: 'oom', ended_at: 'x' }))
