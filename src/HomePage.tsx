@@ -1,17 +1,13 @@
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import styles from './auth/Auth.module.css'
 import { useAuth, useLogout } from './auth/session.ts'
-import { LabPage } from './lab/LabPage.tsx'
+import { endReasonMessage, type Lab, statusLabel } from './lab/api.ts'
+import home from './lab/LabPanel.module.css'
+import { useCreateLab, useCurrentLab, useEndLab, useRecentLabs } from './lab/queries.ts'
+
+const RECENT_LABS = 5
 
 export function HomePage() {
-  const [params] = useSearchParams()
-  const labId = params.get('lab')
-  // Development terminal: independent of the account until labs belong to users.
-  if (labId) return <LabPage labId={labId} />
-  return <Entry />
-}
-
-function Entry() {
   const auth = useAuth()
   const logout = useLogout()
 
@@ -45,7 +41,8 @@ function Entry() {
       {auth.status === 'authenticated' && (
         <>
           <p>Olá, {auth.user.display_name}.</p>
-          <p className={styles.muted}>Os módulos e as missões ainda não estão disponíveis.</p>
+          <CurrentLab />
+          <RecentLabs />
           {logout.error && (
             <p className={styles.error} role="alert">
               {logout.error.message}
@@ -57,10 +54,120 @@ function Entry() {
             disabled={logout.isPending}
             onClick={() => logout.mutate()}
           >
-            Sair
+            {logout.isPending ? 'Saindo…' : 'Sair'}
           </button>
         </>
       )}
     </main>
   )
+}
+
+function CurrentLab() {
+  const current = useCurrentLab()
+  const create = useCreateLab()
+  const end = useEndLab()
+  const navigate = useNavigate()
+  const lab = current.data
+  const error = create.error ?? end.error
+
+  return (
+    <section className={home.panel} aria-labelledby="lab-heading">
+      <h2 id="lab-heading" className={styles.heading}>
+        Laboratório
+      </h2>
+      {current.isPending && (
+        <p className={styles.muted} role="status">
+          Carregando…
+        </p>
+      )}
+      {current.isError && (
+        <p className={styles.error} role="alert">
+          {current.error.message}
+        </p>
+      )}
+      {lab === null && (
+        <>
+          <p className={styles.muted}>Nenhum laboratório ativo.</p>
+          <button
+            className={styles.button}
+            type="button"
+            disabled={create.isPending}
+            onClick={() =>
+              create.mutate(undefined, { onSuccess: (created) => navigate(`/labs/${created.id}`) })
+            }
+          >
+            {create.isPending ? 'Iniciando…' : 'Iniciar laboratório'}
+          </button>
+        </>
+      )}
+      {lab?.status === 'provisioning' && (
+        <p className={styles.muted} role="status">
+          Preparando o laboratório…
+        </p>
+      )}
+      {lab?.status === 'ready' && (
+        <>
+          <p role="status">Pronto até {formatTime(lab.expires_at)}.</p>
+          <div className={styles.links}>
+            <Link to={`/labs/${lab.id}`}>Abrir terminal</Link>
+            <button
+              className={home.inline}
+              type="button"
+              disabled={end.isPending}
+              onClick={() => end.mutate(lab.id)}
+            >
+              {end.isPending ? 'Encerrando…' : 'Encerrar laboratório'}
+            </button>
+          </div>
+        </>
+      )}
+      {lab?.status === 'terminating' && (
+        <p className={styles.muted} role="status">
+          Encerrando o laboratório…
+        </p>
+      )}
+      {error && (
+        <p className={styles.error} role="alert">
+          {error.message}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function RecentLabs() {
+  const labs = useRecentLabs()
+  const ended = (labs.data ?? []).filter((lab) => lab.status === 'terminated' || lab.status === 'failed')
+  if (ended.length === 0) return null
+
+  return (
+    <section className={home.panel} aria-labelledby="recent-heading">
+      <h2 id="recent-heading" className={styles.heading}>
+        Laboratórios anteriores
+      </h2>
+      <ul className={home.list}>
+        {ended.slice(0, RECENT_LABS).map((lab) => (
+          <RecentLab key={lab.id} lab={lab} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function RecentLab({ lab }: { lab: Lab }) {
+  return (
+    <li>
+      <span className={home.when}>{formatDateTime(lab.created_at)}</span>{' '}
+      <span>{statusLabel[lab.status]}</span>
+      {lab.end_reason && <span className={home.reason}>{endReasonMessage[lab.end_reason]}</span>}
+    </li>
+  )
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }

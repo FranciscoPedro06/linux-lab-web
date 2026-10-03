@@ -45,10 +45,21 @@ export function useSignup() {
   })
 }
 
+// Logout also ends the user's lab on the server; nothing cached about labs survives it.
 export function useLogout() {
   const client = useQueryClient()
   return useMutation<void, ApiError>({
     mutationFn: () => logout(),
-    onSuccess: () => client.setQueryData(meKey, null),
+    onSuccess: () => {
+      client.removeQueries({ queryKey: ['labs'] })
+      client.setQueryData(meKey, null)
+    },
   })
+}
+
+// Asks the API again whether the session is valid, e.g. after the terminal was
+// refused with 4401. Pages that need a user then send the visitor to login.
+export function useRecheckSession(): () => void {
+  const client = useQueryClient()
+  return () => void client.invalidateQueries({ queryKey: meKey })
 }

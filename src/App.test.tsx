@@ -1,63 +1,37 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App } from './App.tsx'
+import { ana, api, apiError, lab, labId, renderAt, signedOut } from './testSupport.tsx'
 
-// The page is tested with a stand-in terminal; the real one is covered by Terminal.test.tsx.
+// The pages are tested with a stand-in terminal; the real one is covered by Terminal.test.tsx.
 vi.mock('./terminal/Terminal.tsx', () => ({
-  Terminal: ({ labId, closeRequested }: { labId: string; closeRequested: boolean }) => (
-    <div data-testid="terminal">
-      {labId} {closeRequested ? 'close requested' : 'open'}
-    </div>
-  ),
+  Terminal: ({ labId }: { labId: string }) => <div data-testid="terminal">{labId}</div>,
 }))
-
-const ana = { id: '7d0e0c43-3f5a-4a53-9d1a-1a3b3f0c2e11', email: 'ana@example.com', display_name: 'Ana' }
-
-type Route = (init: RequestInit | undefined) => Response | Promise<Response>
-
-// A fake API: each test sets the replies for the routes it uses.
-let routes: Record<string, Route>
-const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
-  const route = routes[`${init?.method ?? 'GET'} ${input}`]
-  if (!route) throw new Error(`unexpected request ${init?.method} ${input}`)
-  return route(init)
-})
-
-const signedOut: Route = () =>
-  Response.json({ error: { code: 'not_authenticated', message: 'Sessão inválida.' } }, { status: 401 })
-
-function renderAt(path: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[path]}>
-        <App />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  )
-}
 
 function type(label: RegExp, value: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value } })
 }
 
+function signedIn(current: ReturnType<typeof lab> | null = null) {
+  api.routes['GET /api/auth/me'] = () => Response.json(ana)
+  api.routes['GET /api/labs/current'] = () => Response.json(current)
+  api.routes['GET /api/labs'] = () => Response.json(current ? [current] : [])
+}
+
 beforeEach(() => {
-  routes = { 'GET /api/auth/me': signedOut }
-  vi.stubGlobal('fetch', fetchMock)
+  api.routes = { 'GET /api/auth/me': signedOut }
+  vi.stubGlobal('fetch', api.fetch)
 })
 
 afterEach(() => {
   cleanup()
-  fetchMock.mockClear()
+  api.fetch.mockClear()
   vi.unstubAllGlobals()
 })
 
 describe('entry page', () => {
   it('shows loading while the session is checked', () => {
-    routes['GET /api/auth/me'] = () => new Promise<Response>(() => {})
+    api.routes['GET /api/auth/me'] = () => new Promise<Response>(() => {})
     renderAt('/')
 
     expect(screen.getByRole('status').textContent).toBe('Carregando…')
@@ -68,30 +42,30 @@ describe('entry page', () => {
 
     expect(await screen.findByRole('link', { name: 'Entrar' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Criar conta' })).toBeTruthy()
+    expect(api.calls('GET', '/api/labs/current')).toBe(0)
   })
 
   it('greets the signed-in user and logs out', async () => {
-    routes['GET /api/auth/me'] = () => Response.json(ana)
-    routes['POST /api/auth/logout'] = () => new Response(null, { status: 204 })
+    signedIn()
+    api.routes['POST /api/auth/logout'] = () => new Response(null, { status: 204 })
     renderAt('/')
 
     expect(await screen.findByText('Olá, Ana.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Sair' }))
 
     expect(await screen.findByRole('link', { name: 'Entrar' })).toBeTruthy()
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(api.fetch).toHaveBeenCalledWith(
       '/api/auth/logout',
       expect.objectContaining({ method: 'POST', credentials: 'same-origin' }),
     )
   })
 
   it('reports a failed session check and retries', async () => {
-    routes['GET /api/auth/me'] = () =>
-      Response.json({ error: { code: 'internal_error', message: 'Erro interno.' } }, { status: 500 })
+    api.routes['GET /api/auth/me'] = apiError(500, 'internal_error', 'Erro interno.')
     renderAt('/')
 
     expect((await screen.findByRole('alert')).textContent).toBe('Erro interno.')
-    routes['GET /api/auth/me'] = () => Response.json(ana)
+    signedIn()
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
 
     expect(await screen.findByText('Olá, Ana.')).toBeTruthy()
@@ -106,11 +80,106 @@ describe('entry page', () => {
     fireEvent.click(screen.getByRole('link', { name: /Cadastre-se/ }))
     expect(screen.getByRole('heading', { name: 'Criar conta' })).toBeTruthy()
   })
+
+  it('no longer opens a terminal from ?lab=', async () => {
+    renderAt(`/?lab=${labId}`)
+
+    expect(await screen.findByRole('link', { name: 'Entrar' })).toBeTruthy()
+    expect(screen.queryByTestId('terminal')).toBeNull()
+  })
+
+  it('sends unknown paths to the entry page', async () => {
+    renderAt('/nowhere')
+
+    expect(await screen.findByRole('link', { name: 'Entrar' })).toBeTruthy()
+  })
+})
+
+describe('lab on the entry page', () => {
+  it('starts a lab and opens its terminal', async () => {
+    signedIn(null)
+    api.routes['POST /api/labs'] = () => Response.json(lab(), { status: 201 })
+    api.routes[`GET /api/labs/${labId}`] = () => Response.json(lab())
+    renderAt('/')
+
+    expect(await screen.findByText('Nenhum laboratório ativo.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar laboratório' }))
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(labId)
+    const [, init] =
+      api.fetch.mock.calls.find(([path, init]) => path === '/api/labs' && init?.method === 'POST') ?? []
+    expect(JSON.parse(String(init?.body))).toEqual({})
+  })
+
+  it('links to the terminal of a ready lab and ends it', async () => {
+    signedIn(lab())
+    api.routes[`DELETE /api/labs/${labId}`] = () => {
+      signedIn(null)
+      return Response.json(lab({ status: 'terminated', end_reason: 'user', ended_at: 'x' }))
+    }
+    renderAt('/')
+
+    const link = await screen.findByRole('link', { name: 'Abrir terminal' })
+    expect(link.getAttribute('href')).toBe(`/labs/${labId}`)
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar laboratório' }))
+
+    expect(await screen.findByText('Nenhum laboratório ativo.')).toBeTruthy()
+    expect(api.calls('DELETE', `/api/labs/${labId}`)).toBe(1)
+  })
+
+  it('shows a lab that is being prepared', async () => {
+    signedIn(lab({ status: 'provisioning' }))
+    renderAt('/')
+
+    expect(await screen.findByText('Preparando o laboratório…')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Iniciar laboratório' })).toBeNull()
+  })
+
+  it('shows a lab that is being ended', async () => {
+    signedIn(lab({ status: 'terminating', end_reason: 'user', ended_at: 'x' }))
+    renderAt('/')
+
+    expect(await screen.findByText('Encerrando o laboratório…')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Iniciar laboratório' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Abrir terminal' })).toBeNull()
+  })
+
+  it('shows why the user cannot start a lab', async () => {
+    signedIn(null)
+    api.routes['POST /api/labs'] = apiError(
+      503,
+      'lab_capacity_reached',
+      'Todos os laboratórios estão em uso. Tente novamente em alguns minutos.',
+    )
+    renderAt('/')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar laboratório' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Todos os laboratórios estão em uso. Tente novamente em alguns minutos.',
+    )
+  })
+
+  it('lists previous labs with why they ended', async () => {
+    signedIn(null)
+    api.routes['GET /api/labs'] = () =>
+      Response.json([
+        lab({ id: 'a', status: 'terminated', end_reason: 'oom', ended_at: 'x' }),
+        lab({ id: 'b', status: 'terminated', end_reason: 'logout', ended_at: 'x' }),
+      ])
+    renderAt('/')
+
+    expect(await screen.findByText(/excedeu o limite de memória/)).toBeTruthy()
+    expect(screen.getByText(/quando você saiu da conta/)).toBeTruthy()
+  })
 })
 
 describe('login page', () => {
   it('signs in and goes to the entry page', async () => {
-    routes['POST /api/auth/login'] = () => Response.json(ana)
+    api.routes['POST /api/auth/login'] = () => {
+      signedIn()
+      return Response.json(ana)
+    }
     renderAt('/login')
 
     type(/Email/, 'ana@example.com')
@@ -118,7 +187,7 @@ describe('login page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 
     expect(await screen.findByText('Olá, Ana.')).toBeTruthy()
-    const [, init] = fetchMock.mock.calls.find(([path]) => path === '/api/auth/login') ?? []
+    const [, init] = api.fetch.mock.calls.find(([path]) => path === '/api/auth/login') ?? []
     expect(JSON.parse(String(init?.body))).toEqual({
       email: 'ana@example.com',
       password: 'synthetic password 01',
@@ -128,11 +197,11 @@ describe('login page', () => {
   })
 
   it('shows the error message from the API', async () => {
-    routes['POST /api/auth/login'] = () =>
-      Response.json(
-        { error: { code: 'invalid_credentials', message: 'Email ou senha incorretos.' } },
-        { status: 401 },
-      )
+    api.routes['POST /api/auth/login'] = apiError(
+      401,
+      'invalid_credentials',
+      'Email ou senha incorretos.',
+    )
     renderAt('/login')
 
     type(/Email/, 'ana@example.com')
@@ -144,7 +213,7 @@ describe('login page', () => {
   })
 
   it('sends a signed-in user to the entry page', async () => {
-    routes['GET /api/auth/me'] = () => Response.json(ana)
+    signedIn()
     renderAt('/login')
 
     expect(await screen.findByText('Olá, Ana.')).toBeTruthy()
@@ -160,14 +229,17 @@ describe('sign-up page', () => {
   }
 
   it('creates the account and goes to the entry page', async () => {
-    routes['POST /api/auth/signup'] = () => Response.json(ana, { status: 201 })
+    api.routes['POST /api/auth/signup'] = () => {
+      signedIn()
+      return Response.json(ana, { status: 201 })
+    }
     renderAt('/signup')
 
     fill()
     fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
 
     expect(await screen.findByText('Olá, Ana.')).toBeTruthy()
-    const [, init] = fetchMock.mock.calls.find(([path]) => path === '/api/auth/signup') ?? []
+    const [, init] = api.fetch.mock.calls.find(([path]) => path === '/api/auth/signup') ?? []
     expect(JSON.parse(String(init?.body))).toEqual({
       email: 'ana@example.com',
       password: 'synthetic password 01',
@@ -177,36 +249,16 @@ describe('sign-up page', () => {
   })
 
   it('shows the error message from the API', async () => {
-    routes['POST /api/auth/signup'] = () =>
-      Response.json(
-        { error: { code: 'invalid_invite_code', message: 'Código de convite inválido.' } },
-        { status: 403 },
-      )
+    api.routes['POST /api/auth/signup'] = apiError(
+      403,
+      'invalid_invite_code',
+      'Código de convite inválido.',
+    )
     renderAt('/signup')
 
     fill()
     fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
 
     expect((await screen.findByRole('alert')).textContent).toBe('Código de convite inválido.')
-  })
-})
-
-describe('development terminal', () => {
-  it('opens the lab terminal from ?lab= without an account', () => {
-    renderAt('/?lab=abc')
-
-    expect(screen.getByTestId('terminal').textContent).toBe('abc open')
-    expect(screen.getByRole('status').textContent).toContain('Conectando')
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: /Reiniciar/ }).disabled).toBe(true)
-    expect(fetchMock).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Encerrar' }))
-    expect(screen.getByTestId('terminal').textContent).toBe('abc close requested')
-  })
-
-  it('sends unknown paths to the entry page', async () => {
-    renderAt('/nowhere')
-
-    expect(await screen.findByRole('link', { name: 'Entrar' })).toBeTruthy()
   })
 })
