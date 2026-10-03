@@ -135,6 +135,15 @@ describe('lab on the entry page', () => {
     expect(screen.queryByRole('button', { name: 'Iniciar laboratório' })).toBeNull()
   })
 
+  it('shows a lab that is being ended', async () => {
+    signedIn(lab({ status: 'terminating', end_reason: 'user', ended_at: 'x' }))
+    renderAt('/')
+
+    expect(await screen.findByText('Encerrando o laboratório…')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Iniciar laboratório' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Abrir terminal' })).toBeNull()
+  })
+
   it('shows why the user cannot start a lab', async () => {
     signedIn(null)
     api.routes['POST /api/labs'] = apiError(
