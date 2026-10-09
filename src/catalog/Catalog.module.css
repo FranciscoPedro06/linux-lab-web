@@ -1,0 +1,35 @@
+.module {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.module p {
+  margin: 0;
+}
+
+.moduleTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.missions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.summary,
+.meta {
+  display: block;
+  color: var(--text-muted);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}

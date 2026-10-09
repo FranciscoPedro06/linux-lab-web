@@ -45,13 +45,15 @@ export function useSignup() {
   })
 }
 
-// Logout also ends the user's lab on the server; nothing cached about labs survives it.
+// Logout also ends the user's lab on the server; nothing cached about labs or the
+// catalog survives it.
 export function useLogout() {
   const client = useQueryClient()
   return useMutation<void, ApiError>({
     mutationFn: () => logout(),
     onSuccess: () => {
       client.removeQueries({ queryKey: ['labs'] })
+      client.removeQueries({ queryKey: ['catalog'] })
       client.setQueryData(meKey, null)
     },
   })
