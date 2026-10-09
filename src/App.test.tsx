@@ -16,6 +16,7 @@ function signedIn(current: ReturnType<typeof lab> | null = null) {
   api.routes['GET /api/auth/me'] = () => Response.json(ana)
   api.routes['GET /api/labs/current'] = () => Response.json(current)
   api.routes['GET /api/labs'] = () => Response.json(current ? [current] : [])
+  api.routes['GET /api/modules'] = () => Response.json([])
 }
 
 beforeEach(() => {

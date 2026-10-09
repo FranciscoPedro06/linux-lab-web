@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router'
 import styles from './auth/Auth.module.css'
 import { useAuth, useLogout } from './auth/session.ts'
+import { Catalog } from './catalog/Catalog.tsx'
 import { endReasonMessage, type Lab, statusLabel } from './lab/api.ts'
 import home from './lab/LabPanel.module.css'
 import { useCreateLab, useCurrentLab, useEndLab, useRecentLabs } from './lab/queries.ts'
@@ -42,6 +43,7 @@ export function HomePage() {
         <>
           <p>Olá, {auth.user.display_name}.</p>
           <CurrentLab />
+          <Catalog />
           <RecentLabs />
           {logout.error && (
             <p className={styles.error} role="alert">
