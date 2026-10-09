@@ -1,0 +1,128 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.5rem;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 3rem 1rem;
+}
+
+.page p {
+  margin: 0;
+}
+
+.trail {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.summary {
+  color: var(--text-muted);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.briefing {
+  width: 100%;
+}
+
+.briefing h2,
+.briefing h3,
+.briefing h4 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.briefing h2:first-child {
+  margin-top: 0;
+}
+
+.briefing p,
+.briefing ul,
+.briefing ol,
+.briefing pre {
+  margin: 0 0 0.75rem;
+}
+
+.page code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+.briefing pre {
+  padding: 0.75rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.hint {
+  margin-bottom: 0.5rem;
+}
+
+.hint summary {
+  cursor: pointer;
+}
+
+.hint p {
+  margin-top: 0.4rem;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.875rem;
+}
+
+.button {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
