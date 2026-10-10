@@ -6,7 +6,7 @@ import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { ConnectionStatus } from '../terminal/connection.ts'
 import { MAX_RECONNECT_ATTEMPTS, reconnectDelay } from '../terminal/reconnect.ts'
 import { Terminal } from '../terminal/Terminal.tsx'
-import { endReasonMessage, fetchLab, type Lab, statusLabel } from './api.ts'
+import { endReasonMessage, fetchLab, type Lab, type LabMission, statusLabel } from './api.ts'
 import styles from './LabPage.module.css'
 import { labKeys, useCreateLab, useEndLab, useLab } from './queries.ts'
 
@@ -45,8 +45,21 @@ function LabView({ labId }: { labId: string }) {
     return <Message text={lab.error.message} alert retry={() => void lab.refetch()} />
   }
   if (lab.data.status === 'ready') return <ReadyLab lab={lab.data} />
-  if (lab.data.status === 'provisioning') return <Message text="Preparando o laboratório…" />
+  if (lab.data.status === 'provisioning') {
+    return <Message text="Preparando o laboratório…" mission={lab.data.mission} />
+  }
   return <EndedLab lab={lab.data} />
+}
+
+// The mission version the lab was created for, as the API reports it.
+function MissionLine({ mission }: { mission: LabMission | null }) {
+  if (!mission) return null
+  return (
+    <p className={styles.mission}>
+      Missão: <Link to={`/missions/${mission.slug}`}>{mission.title}</Link> · versão{' '}
+      {mission.version}
+    </p>
+  )
 }
 
 type Retry = { attempt: number; delay: number }
@@ -141,6 +154,7 @@ function ReadyLab({ lab }: { lab: Lab }) {
         <h1 className={styles.title}>
           <Link to="/">Linux Lab</Link>
         </h1>
+        <MissionLine mission={lab.mission} />
         <p className={styles.status} role="status">
           Estado: <span data-state={status.state}>{stateLabel[status.state]}</span>
           {status.reason && <span className={styles.reason}> — {status.reason}</span>}
@@ -195,16 +209,20 @@ function ReadyLab({ lab }: { lab: Lab }) {
   )
 }
 
+// A new lab is for the same mission, at its current version. Once this lab is no
+// longer active the API allows it; a lab with no mission has nothing to restart.
 function EndedLab({ lab }: { lab: Lab }) {
   const create = useCreateLab()
   const navigate = useNavigate()
   const reason = lab.end_reason ? endReasonMessage[lab.end_reason] : null
+  const mission = lab.mission
 
   return (
     <main className={styles.ended}>
       <h1 className={styles.title}>
         <Link to="/">Linux Lab</Link>
       </h1>
+      <MissionLine mission={mission} />
       <p role="status">
         Laboratório: <strong data-lab-status={lab.status}>{statusLabel[lab.status]}</strong>
       </p>
@@ -213,18 +231,18 @@ function EndedLab({ lab }: { lab: Lab }) {
           {reason}
         </p>
       )}
-      {lab.status !== 'terminating' && (
+      {lab.status !== 'terminating' && mission && (
         <button
           className={styles.primary}
           type="button"
           disabled={create.isPending}
           onClick={() =>
-            create.mutate(undefined, {
+            create.mutate(mission.slug, {
               onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
             })
           }
         >
-          {create.isPending ? 'Iniciando…' : 'Iniciar novo laboratório'}
+          {create.isPending ? 'Preparando…' : 'Iniciar novo laboratório'}
         </button>
       )}
       {create.error && (
@@ -237,12 +255,23 @@ function EndedLab({ lab }: { lab: Lab }) {
   )
 }
 
-function Message({ text, alert, retry }: { text: string; alert?: boolean; retry?: () => void }) {
+function Message({
+  text,
+  alert,
+  retry,
+  mission = null,
+}: {
+  text: string
+  alert?: boolean
+  retry?: () => void
+  mission?: LabMission | null
+}) {
   return (
     <main className={styles.ended}>
       <h1 className={styles.title}>
         <Link to="/">Linux Lab</Link>
       </h1>
+      <MissionLine mission={mission} />
       <p className={alert ? styles.error : styles.muted} role={alert ? 'alert' : 'status'}>
         {text}
       </p>

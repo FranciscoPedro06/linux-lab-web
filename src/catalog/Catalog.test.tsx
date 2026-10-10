@@ -79,7 +79,7 @@ describe('catalog on the entry page', () => {
     expect(await within(section).findByText('Nenhuma missão publicada ainda.')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
     // The lab panel is still there.
-    expect(screen.getByRole('button', { name: 'Iniciar laboratório' })).toBeTruthy()
+    expect(screen.getByText('Nenhum laboratório ativo.')).toBeTruthy()
   })
 
   it('shows loading while the catalog is fetched', async () => {
@@ -141,7 +141,8 @@ describe('catalog on the entry page', () => {
     renderAt('/')
 
     expect(await screen.findByRole('link', { name: 'Abrir terminal' })).toBeTruthy()
-    expect(await screen.findByRole('link', { name: 'Arquivo de teste' })).toBeTruthy()
+    const section = await catalogSection()
+    expect(await within(section).findByRole('link', { name: 'Arquivo de teste' })).toBeTruthy()
   })
 
   it('opens a mission from the list', async () => {

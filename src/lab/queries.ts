@@ -51,9 +51,16 @@ function useStoreLab() {
   }
 }
 
+// The variable is the mission's slug. A refusal (another mission's lab, one being
+// started or ended) also refreshes the current lab, so the page shows what blocks it.
 export function useCreateLab() {
+  const client = useQueryClient()
   const store = useStoreLab()
-  return useMutation<Lab, ApiError>({ mutationFn: () => createLab(), onSuccess: store })
+  return useMutation<Lab, ApiError, string>({
+    mutationFn: (missionSlug) => createLab(missionSlug),
+    onSuccess: store,
+    onError: () => void client.invalidateQueries({ queryKey: labKeys.current }),
+  })
 }
 
 export function useEndLab() {
