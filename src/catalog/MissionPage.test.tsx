@@ -1,16 +1,41 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ana, api, apiError, missionDetail, renderAt, signedOut } from '../testSupport.tsx'
+import {
+  ana,
+  api,
+  apiError,
+  lab,
+  labId,
+  missionDetail,
+  renderAt,
+  signedOut,
+} from '../testSupport.tsx'
+
+// The lab page is tested with a stand-in terminal; the real one is covered by Terminal.test.tsx.
+vi.mock('../terminal/Terminal.tsx', () => ({
+  Terminal: ({ labId }: { labId: string }) => <div data-testid="terminal">{labId}</div>,
+}))
 
 const path = '/missions/sample-file'
+
+function current(value: ReturnType<typeof lab> | null) {
+  api.routes['GET /api/labs/current'] = () => Response.json(value)
+}
+
+function labSection() {
+  return screen.findByRole('region', { name: 'Laboratório' })
+}
 
 function mission(overrides: Parameters<typeof missionDetail>[0] = {}) {
   api.routes['GET /api/missions/sample-file'] = () => Response.json(missionDetail(overrides))
 }
 
 beforeEach(() => {
-  api.routes = { 'GET /api/auth/me': () => Response.json(ana) }
+  api.routes = {
+    'GET /api/auth/me': () => Response.json(ana),
+    'GET /api/labs/current': () => Response.json(null),
+  }
   vi.stubGlobal('fetch', api.fetch)
 })
 
@@ -18,6 +43,133 @@ afterEach(() => {
   cleanup()
   api.fetch.mockClear()
   vi.unstubAllGlobals()
+})
+
+describe('starting a lab from the mission', () => {
+  it('starts a lab for the mission and opens it', async () => {
+    mission()
+    api.routes['POST /api/labs'] = () => Response.json(lab(), { status: 201 })
+    api.routes[`GET /api/labs/${labId}`] = () => Response.json(lab())
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar laboratório' }))
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(labId)
+    const [, init] =
+      api.fetch.mock.calls.find(([input, init]) => input === '/api/labs' && init?.method === 'POST') ??
+      []
+    expect(JSON.parse(String(init?.body))).toEqual({ mission_slug: 'sample-file' })
+    expect(screen.getByRole('link', { name: 'Arquivo de teste' }).getAttribute('href')).toBe(
+      '/missions/sample-file',
+    )
+  })
+
+  it('shows that the lab is being prepared and sends one request', async () => {
+    mission()
+    api.routes['POST /api/labs'] = () => new Promise<Response>(() => {})
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar laboratório' }))
+
+    const button = await screen.findByRole('button', { name: 'Preparando…' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/pode levar até um minuto/)).toBeTruthy()
+    fireEvent.click(button)
+    expect(api.calls('POST', '/api/labs')).toBe(1)
+  })
+
+  it('shows why the lab could not start', async () => {
+    mission()
+    api.routes['POST /api/labs'] = apiError(
+      503,
+      'lab_start_failed',
+      'Não foi possível iniciar o laboratório. Tente novamente.',
+    )
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar laboratório' }))
+
+    const section = await labSection()
+    expect((await within(section).findByRole('alert')).textContent).toBe(
+      'Não foi possível iniciar o laboratório. Tente novamente.',
+    )
+    expect(within(section).getByRole('button', { name: 'Iniciar laboratório' })).toBeTruthy()
+  })
+
+  it('shows the lab that blocks a refused start', async () => {
+    mission()
+    const other = lab({ mission: { slug: 'sample-answer', title: 'Resposta de teste', version: 3 } })
+    api.routes['POST /api/labs'] = () => {
+      current(other)
+      return Response.json(
+        {
+          error: {
+            code: 'active_lab_for_different_mission',
+            message: 'Você já tem um laboratório ativo de outra missão.',
+          },
+        },
+        { status: 409 },
+      )
+    }
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar laboratório' }))
+
+    const section = await labSection()
+    expect(await within(section).findByRole('link', { name: 'Abrir laboratório atual' })).toBeTruthy()
+    expect(within(section).getByRole('alert').textContent).toBe(
+      'Você já tem um laboratório ativo de outra missão.',
+    )
+    expect(within(section).queryByRole('button')).toBeNull()
+  })
+
+  it('offers the lab the user already has for this mission', async () => {
+    mission()
+    current(lab())
+    renderAt(path)
+
+    const section = await labSection()
+    const link = await within(section).findByRole('link', { name: 'Abrir laboratório' })
+    expect(link.getAttribute('href')).toBe(`/labs/${labId}`)
+    expect(within(section).getByText('Seu laboratório desta missão está pronto.')).toBeTruthy()
+    expect(within(section).queryByRole('button')).toBeNull()
+  })
+
+  it('offers a lab being prepared for this mission', async () => {
+    mission()
+    current(lab({ status: 'provisioning' }))
+    renderAt(path)
+
+    const section = await labSection()
+    expect(await within(section).findByText('Preparando o laboratório…')).toBeTruthy()
+    expect(within(section).getByRole('link', { name: 'Abrir laboratório' })).toBeTruthy()
+    expect(within(section).queryByRole('button')).toBeNull()
+  })
+
+  it('explains that the lab of another mission must end first, without replacing it', async () => {
+    mission()
+    current(lab({ mission: { slug: 'sample-answer', title: 'Resposta de teste', version: 3 } }))
+    renderAt(path)
+
+    const section = await labSection()
+    const notice = await within(section).findByText(/A troca de missão ainda não está disponível/)
+    expect(notice.textContent).toContain('“Resposta de teste”')
+    const link = within(section).getByRole('link', { name: 'Abrir laboratório atual' })
+    expect(link.getAttribute('href')).toBe(`/labs/${labId}`)
+    expect(within(section).queryByRole('button')).toBeNull()
+    expect(api.calls('POST', '/api/labs')).toBe(0)
+  })
+
+  it('waits while the previous lab is being ended', async () => {
+    mission()
+    current(lab({ status: 'terminating', end_reason: 'user', ended_at: 'x' }))
+    renderAt(path)
+
+    const section = await labSection()
+    expect(await within(section).findByText(/está sendo encerrado/)).toBeTruthy()
+    expect(within(section).queryByRole('button')).toBeNull()
+    expect(within(section).queryByRole('link')).toBeNull()
+  })
 })
 
 describe('mission page', () => {
@@ -56,14 +208,14 @@ describe('mission page', () => {
     expect(details[1]?.querySelector('code')?.textContent).toBe('ls -l')
   })
 
-  it('offers nothing that starts or changes a lab', async () => {
+  it('reads the mission and the current lab, and changes nothing', async () => {
     mission()
     renderAt(path)
 
-    await screen.findByRole('heading', { level: 1, name: 'Arquivo de teste' })
-    expect(screen.queryByRole('button')).toBeNull()
-    expect(api.fetch.mock.calls.map(([input]) => input)).toEqual([
+    await screen.findByRole('button', { name: 'Iniciar laboratório' })
+    expect(api.fetch.mock.calls.map(([input]) => input).sort()).toEqual([
       '/api/auth/me',
+      '/api/labs/current',
       '/api/missions/sample-file',
     ])
   })
