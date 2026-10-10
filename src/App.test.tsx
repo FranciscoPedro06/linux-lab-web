@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ana, api, apiError, lab, labId, renderAt, signedOut } from './testSupport.tsx'
 
@@ -97,19 +97,23 @@ describe('entry page', () => {
 })
 
 describe('lab on the entry page', () => {
-  it('starts a lab and opens its terminal', async () => {
+  it('sends the user to a mission to start a lab', async () => {
     signedIn(null)
-    api.routes['POST /api/labs'] = () => Response.json(lab(), { status: 201 })
-    api.routes[`GET /api/labs/${labId}`] = () => Response.json(lab())
     renderAt('/')
 
     expect(await screen.findByText('Nenhum laboratório ativo.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar laboratório' }))
+    expect(screen.getByText('Escolha uma missão abaixo para iniciar um laboratório.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Iniciar laboratório' })).toBeNull()
+    expect(api.calls('POST', '/api/labs')).toBe(0)
+  })
 
-    expect((await screen.findByTestId('terminal')).textContent).toBe(labId)
-    const [, init] =
-      api.fetch.mock.calls.find(([path, init]) => path === '/api/labs' && init?.method === 'POST') ?? []
-    expect(JSON.parse(String(init?.body))).toEqual({})
+  it('names the mission of the active lab', async () => {
+    signedIn(lab())
+    renderAt('/')
+
+    const panel = await screen.findByRole('region', { name: 'Laboratório' })
+    const link = await within(panel).findByRole('link', { name: 'Arquivo de teste' })
+    expect(link.getAttribute('href')).toBe('/missions/sample-file')
   })
 
   it('links to the terminal of a ready lab and ends it', async () => {
@@ -143,22 +147,6 @@ describe('lab on the entry page', () => {
     expect(await screen.findByText('Encerrando o laboratório…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Iniciar laboratório' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Abrir terminal' })).toBeNull()
-  })
-
-  it('shows why the user cannot start a lab', async () => {
-    signedIn(null)
-    api.routes['POST /api/labs'] = apiError(
-      503,
-      'lab_capacity_reached',
-      'Todos os laboratórios estão em uso. Tente novamente em alguns minutos.',
-    )
-    renderAt('/')
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar laboratório' }))
-
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'Todos os laboratórios estão em uso. Tente novamente em alguns minutos.',
-    )
   })
 
   it('lists previous labs with why they ended', async () => {

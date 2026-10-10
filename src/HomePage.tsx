@@ -1,10 +1,10 @@
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import styles from './auth/Auth.module.css'
 import { useAuth, useLogout } from './auth/session.ts'
 import { Catalog } from './catalog/Catalog.tsx'
 import { endReasonMessage, type Lab, statusLabel } from './lab/api.ts'
 import home from './lab/LabPanel.module.css'
-import { useCreateLab, useCurrentLab, useEndLab, useRecentLabs } from './lab/queries.ts'
+import { useCurrentLab, useEndLab, useRecentLabs } from './lab/queries.ts'
 
 const RECENT_LABS = 5
 
@@ -64,13 +64,12 @@ export function HomePage() {
   )
 }
 
+// Labs are started from a mission's page; this panel shows the active one.
 function CurrentLab() {
   const current = useCurrentLab()
-  const create = useCreateLab()
   const end = useEndLab()
-  const navigate = useNavigate()
   const lab = current.data
-  const error = create.error ?? end.error
+  const error = end.error
 
   return (
     <section className={home.panel} aria-labelledby="lab-heading">
@@ -90,17 +89,13 @@ function CurrentLab() {
       {lab === null && (
         <>
           <p className={styles.muted}>Nenhum laboratório ativo.</p>
-          <button
-            className={styles.button}
-            type="button"
-            disabled={create.isPending}
-            onClick={() =>
-              create.mutate(undefined, { onSuccess: (created) => navigate(`/labs/${created.id}`) })
-            }
-          >
-            {create.isPending ? 'Iniciando…' : 'Iniciar laboratório'}
-          </button>
+          <p className={styles.muted}>Escolha uma missão abaixo para iniciar um laboratório.</p>
         </>
+      )}
+      {lab?.mission && (
+        <p>
+          Missão: <Link to={`/missions/${lab.mission.slug}`}>{lab.mission.title}</Link>
+        </p>
       )}
       {lab?.status === 'provisioning' && (
         <p className={styles.muted} role="status">
@@ -161,6 +156,7 @@ function RecentLab({ lab }: { lab: Lab }) {
     <li>
       <span className={home.when}>{formatDateTime(lab.created_at)}</span>{' '}
       <span>{statusLabel[lab.status]}</span>
+      {lab.mission && <span> · {lab.mission.title}</span>}
       {lab.end_reason && <span className={home.reason}>{endReasonMessage[lab.end_reason]}</span>}
     </li>
   )

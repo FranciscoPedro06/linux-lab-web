@@ -15,6 +15,13 @@ export type EndReason =
   | 'provisioning_failed'
   | 'provisioning_timeout'
 
+// The mission version a lab was created for. It does not change while the lab exists.
+export type LabMission = {
+  slug: string
+  title: string
+  version: number
+}
+
 export type Lab = {
   id: string
   status: LabStatus
@@ -22,6 +29,8 @@ export type Lab = {
   created_at: string
   expires_at: string
   ended_at: string | null
+  // null only for labs created before labs were tied to missions.
+  mission: LabMission | null
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -49,9 +58,12 @@ export function fetchLab(id: string, fetchImpl?: FetchLike): Promise<Lab> {
   return expectLab(apiRequest<Lab>(`/api/labs/${encodeURIComponent(id)}`, {}, fetchImpl))
 }
 
-// Starts a lab, or returns the ready lab the user already has.
-export function createLab(fetchImpl?: FetchLike): Promise<Lab> {
-  return expectLab(apiRequest<Lab>('/api/labs', { method: 'POST' }, fetchImpl))
+// Starts a lab for the mission, or returns the user's ready lab for that mission. The
+// API answers only once the mission's setup has run, which can take about a minute.
+export function createLab(missionSlug: string, fetchImpl?: FetchLike): Promise<Lab> {
+  return expectLab(
+    apiRequest<Lab>('/api/labs', { method: 'POST', body: { mission_slug: missionSlug } }, fetchImpl),
+  )
 }
 
 export function endLab(id: string, fetchImpl?: FetchLike): Promise<Lab> {

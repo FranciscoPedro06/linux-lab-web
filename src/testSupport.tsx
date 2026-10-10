@@ -25,6 +25,7 @@ export function lab(overrides: Partial<Lab> = {}): Lab {
     created_at: '2026-09-30T12:00:00Z',
     expires_at: '2026-09-30T14:00:00Z',
     ended_at: null,
+    mission: { slug: 'sample-file', title: 'Arquivo de teste', version: 1 },
     ...overrides,
   }
 }

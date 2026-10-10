@@ -137,6 +137,63 @@ describe('lab page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Iniciar novo laboratório' }))
 
     expect((await screen.findByTestId('terminal')).textContent).toBe(`${newId} open`)
+    const [, init] =
+      api.fetch.mock.calls.find(([input, init]) => input === '/api/labs' && init?.method === 'POST') ??
+      []
+    expect(JSON.parse(String(init?.body))).toEqual({ mission_slug: 'sample-file' })
+  })
+
+  it('shows the mission and the version the lab was created for', async () => {
+    api.routes[`GET /api/labs/${labId}`] = () =>
+      Response.json(lab({ mission: { slug: 'sample-file', title: 'Arquivo de teste', version: 4 } }))
+    renderAt(path)
+
+    const link = await screen.findByRole('link', { name: 'Arquivo de teste' })
+    expect(link.getAttribute('href')).toBe('/missions/sample-file')
+    expect(link.closest('p')?.textContent).toBe('Missão: Arquivo de teste · versão 4')
+  })
+
+  it('shows the mission while the lab is prepared', async () => {
+    api.routes[`GET /api/labs/${labId}`] = () => Response.json(lab({ status: 'provisioning' }))
+    renderAt(path)
+
+    expect(await screen.findByText('Preparando o laboratório…')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Arquivo de teste' })).toBeTruthy()
+  })
+
+  it('shows Preparando while the new lab is created, and sends one request', async () => {
+    api.routes[`GET /api/labs/${labId}`] = () =>
+      Response.json(lab({ status: 'terminated', end_reason: 'user', ended_at: 'x' }))
+    api.routes['POST /api/labs'] = () => new Promise<Response>(() => {})
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar novo laboratório' }))
+
+    const button = await screen.findByRole('button', { name: 'Preparando…' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(button)
+    expect(api.calls('POST', '/api/labs')).toBe(1)
+  })
+
+  it('offers no new lab for a lab without a mission', async () => {
+    api.routes[`GET /api/labs/${labId}`] = () =>
+      Response.json(lab({ status: 'terminated', end_reason: 'user', ended_at: 'x', mission: null }))
+    renderAt(path)
+
+    expect(await screen.findByText('Você encerrou o laboratório.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Iniciar novo laboratório' })).toBeNull()
+    expect(screen.queryByText(/Missão:/)).toBeNull()
+  })
+
+  it('shows why a new lab could not start', async () => {
+    api.routes[`GET /api/labs/${labId}`] = () =>
+      Response.json(lab({ status: 'terminated', end_reason: 'user', ended_at: 'x' }))
+    api.routes['POST /api/labs'] = apiError(404, 'mission_not_found', 'Missão não encontrada.')
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar novo laboratório' }))
+
+    expect(await screen.findByText('Missão não encontrada.')).toBeTruthy()
   })
 })
 
