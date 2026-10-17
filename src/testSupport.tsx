@@ -6,6 +6,12 @@ import { vi } from 'vitest'
 import { App } from './App.tsx'
 import type { CatalogModule, MissionCard, MissionDetail, Progress } from './catalog/api.ts'
 import type { Lab } from './lab/api.ts'
+import { FakeLockManager } from './testLocks.ts'
+
+// Web Locks for every app rendered in a test, shared like the tabs of one browser.
+// jsdom has none.
+export const locks = new FakeLockManager()
+Object.defineProperty(navigator, 'locks', { configurable: true, value: locks })
 
 export type Route = (init: RequestInit | undefined) => Response | Promise<Response>
 
