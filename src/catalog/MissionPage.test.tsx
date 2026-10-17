@@ -214,11 +214,13 @@ describe('mission page', () => {
     renderAt(path)
 
     await screen.findByRole('button', { name: 'Iniciar laboratório' })
-    expect(api.fetch.mock.calls.map(([input]) => input).sort()).toEqual([
+    // The session is checked again once the tab may show private pages (auth/tabs.tsx).
+    expect([...new Set(api.fetch.mock.calls.map(([input]) => input))].sort()).toEqual([
       '/api/auth/me',
       '/api/labs/current',
       '/api/missions/sample-file',
     ])
+    expect(api.fetch.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true)
   })
 
   it('says when the mission expects an answer', async () => {

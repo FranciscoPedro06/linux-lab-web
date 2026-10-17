@@ -59,7 +59,10 @@ describe('entry page', () => {
 
   it('greets the signed-in user and logs out', async () => {
     signedIn()
-    api.routes['POST /api/auth/logout'] = () => new Response(null, { status: 204 })
+    api.routes['POST /api/auth/logout'] = () => {
+      api.routes['GET /api/auth/me'] = signedOut
+      return new Response(null, { status: 204 })
+    }
     renderAt('/')
 
     expect(await screen.findByText('Olá, Ana.')).toBeTruthy()
