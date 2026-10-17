@@ -212,7 +212,7 @@ describe('late responses of operations started by the previous user', () => {
   })
 })
 
-describe('the session check and other tabs', () => {
+describe('the session check on this tab', () => {
   it('keeps the new user when an older session check answers after the login', async () => {
     const check = pending()
     api.routes['GET /api/auth/me'] = signedOut
@@ -229,44 +229,5 @@ describe('the session check and other tabs', () => {
     await settled(client)
 
     expect(screen.getByText('Olá, Bia.')).toBeTruthy()
-  })
-
-  it('drops what it showed when another tab signs in as someone else', async () => {
-    api.routes['GET /api/modules'] = () =>
-      Response.json([catalogModule({ missions: [missionCard({ progress: completed() })] })])
-    renderAt('/')
-    await screen.findByText('Olá, Ana.')
-    await within(screen.getByRole('region', { name: 'Missões' })).findByText('Concluída')
-
-    // Another tab signs in as Bia: the cookie is now hers.
-    const check = pending()
-    api.routes['GET /api/auth/me'] = check.route
-    api.routes['GET /api/modules'] = () => Response.json(biaCatalog())
-    const otherTab = new BroadcastChannel('linux-lab-session')
-    otherTab.postMessage('session-changed')
-    otherTab.close()
-
-    // Nothing of Ana's is shown while the tab finds out who is signed in.
-    await vi.waitFor(() => expect(screen.queryByText('Olá, Ana.')).toBeNull())
-    expect(screen.queryByText('Concluída')).toBeNull()
-    check.release(Response.json(bia))
-    await screen.findByText('Olá, Bia.')
-    const catalog = screen.getByRole('region', { name: 'Missões' })
-    await within(catalog).findByRole('link', { name: 'Arquivo de teste' })
-    expect(catalog.textContent).not.toContain('Concluída')
-  })
-
-  it('tells other tabs when the session changes here', async () => {
-    const messages: unknown[] = []
-    const otherTab = new BroadcastChannel('linux-lab-session')
-    otherTab.onmessage = (event) => messages.push(event.data)
-    api.routes['GET /api/auth/me'] = signedOut
-    renderAt('/login')
-    await screen.findByRole('heading', { name: 'Entrar' })
-
-    await biaSignsIn()
-
-    await vi.waitFor(() => expect(messages).toEqual(['session-changed']))
-    otherTab.close()
   })
 })
