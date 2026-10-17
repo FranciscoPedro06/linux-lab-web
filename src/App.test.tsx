@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ana, api, apiError, lab, labId, renderAt, signedOut } from './testSupport.tsx'
+import {
+  ana,
+  api,
+  apiError,
+  catalogModule,
+  completed,
+  lab,
+  labId,
+  missionCard,
+  renderAt,
+  signedOut,
+} from './testSupport.tsx'
 
 // The pages are tested with a stand-in terminal; the real one is covered by Terminal.test.tsx.
 vi.mock('./terminal/Terminal.tsx', () => ({
@@ -249,5 +260,39 @@ describe('sign-up page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
 
     expect((await screen.findByRole('alert')).textContent).toBe('Código de convite inválido.')
+  })
+})
+
+describe('changing users on the same tab', () => {
+  const bia = { id: '0b8f5d1e-2c4a-4b1d-8e6f-1a3b3f0c2e22', email: 'bia@example.com', display_name: 'Bia' }
+
+  it('never shows the previous user progress after their session expired', async () => {
+    signedIn()
+    api.routes['GET /api/modules'] = () =>
+      Response.json([catalogModule({ missions: [missionCard({ progress: completed() })] })])
+    renderAt('/')
+    const section = await screen.findByRole('region', { name: 'Missões' })
+    await within(section).findByText('Concluída')
+
+    // Ana's session expires: the next request is refused and the page goes to login.
+    api.routes['GET /api/missions/sample-file'] = apiError(401, 'not_authenticated', 'Sessão inválida.')
+    api.routes['GET /api/auth/me'] = signedOut
+    fireEvent.click(within(section).getByRole('link', { name: 'Arquivo de teste' }))
+    await screen.findByRole('heading', { name: 'Entrar' })
+
+    // Bia signs in on the same tab; her own catalog has not arrived yet.
+    api.routes['POST /api/auth/login'] = () => {
+      api.routes['GET /api/auth/me'] = () => Response.json(bia)
+      return Response.json(bia)
+    }
+    api.routes['GET /api/modules'] = () => new Promise<Response>(() => {})
+    type(/Email/, 'bia@example.com')
+    type(/Senha/, 'synthetic password 01')
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+
+    expect(await screen.findByText('Olá, Bia.')).toBeTruthy()
+    const catalog = await screen.findByRole('region', { name: 'Missões' })
+    expect(catalog.textContent).toContain('Carregando…')
+    expect(catalog.textContent).not.toContain('Concluída')
   })
 })
