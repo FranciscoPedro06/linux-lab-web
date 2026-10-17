@@ -34,7 +34,7 @@ The session cookie is shared by every tab, so tabs are coordinated with the Web 
 - Login, sign-up and logout run under the same lock in exclusive mode, which the browser grants only when no tab holds it shared. The tab first posts `session-changing` (no data in any message); the others hide their pages and release the lock, and hidden tabs have released it already. The request is sent only once the lock is granted, so while the cookie changes no tab shows private pages. Then `session-changed` or `session-unchanged` is posted, the lock is released, and every tab asks the API again before showing anything.
 - If a visible tab does not release the lock within 5 seconds, the change is refused before anything is sent: "Outra aba do Linux Lab não liberou a sessão." A tab told that a change started but never how it ended checks the session on its own after 60 seconds, still behind the lock.
 - A tab that becomes hidden hides its pages and releases the lock; when it is shown again it takes the lock and asks the API first.
-- Supported browsers are those with Web Locks and `BroadcastChannel` (Chrome and Edge 69+, Firefox 96+, Safari 15.4+). Elsewhere signing in and signing up are refused, so no other user can be signed in there; logging out still works.
+- Supported browsers are those with Web Locks and `BroadcastChannel` (Chrome 69+, Edge 79+, Firefox 96+, Safari 15.4+). Elsewhere signing in and signing up are refused, so no other user can be signed in there; logging out still works.
 
 Planned, not implemented yet: lab reset, switching a lab to another mission, and the explanation and solutions after completion (a candidate for increment 14).
 
