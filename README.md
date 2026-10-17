@@ -26,6 +26,8 @@ The catalog and the mission page mark completed missions. A completion belongs t
 
 After a validation, the progress in the response replaces the cached one in the catalog and the mission detail. If the request fails without an answer from the API (a dropped connection or a 5xx), the completion may have been stored anyway, so both are read again from the API; the validation itself is never retried.
 
+Cached labs and catalog belong to the user who loaded them. Signing in, signing up or logging out drops them, and the other open tabs, told through a `BroadcastChannel` message that carries no data, drop theirs and ask the API who is signed in. A lab or validation request records who started it; if its answer arrives after another user signed in, it is not written to the cache. A session check still in flight when someone signs in is cancelled, so it cannot sign them out again.
+
 Planned, not implemented yet: lab reset, switching a lab to another mission, and the explanation and solutions after completion (a candidate for increment 14).
 
 The interface text is in Portuguese.

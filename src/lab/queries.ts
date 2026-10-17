@@ -1,5 +1,6 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ApiError } from '../auth/api.ts'
+import { useUserMutation } from '../auth/session.ts'
 import type { CatalogModule, MissionDetail, Progress } from '../catalog/api.ts'
 import { catalogKeys } from '../catalog/queries.ts'
 import {
@@ -63,12 +64,15 @@ function useStoreLab() {
   }
 }
 
+// Lab and validation mutations write to the cache through useUserMutation, so an
+// answer that arrives after another user signed in on this tab changes nothing.
+
 // The variable is the mission's slug. A refusal (another mission's lab, one being
 // started or ended) also refreshes the current lab, so the page shows what blocks it.
 export function useCreateLab() {
   const client = useQueryClient()
   const store = useStoreLab()
-  return useMutation<Lab, ApiError, string>({
+  return useUserMutation<Lab, string>({
     mutationFn: (missionSlug) => createLab(missionSlug),
     onSuccess: store,
     onError: () => void client.invalidateQueries({ queryKey: labKeys.current }),
@@ -77,7 +81,7 @@ export function useCreateLab() {
 
 export function useEndLab() {
   const store = useStoreLab()
-  return useMutation<Lab, ApiError, string>({ mutationFn: (id) => endLab(id), onSuccess: store })
+  return useUserMutation<Lab, string>({ mutationFn: (id) => endLab(id), onSuccess: store })
 }
 
 // Whether a failed validation request may still have been stored: the connection was
@@ -96,7 +100,7 @@ function outcomeUnknown(error: ApiError): boolean {
 // recorded before the response was lost.
 export function useValidateLab(labId: string, missionSlug: string) {
   const client = useQueryClient()
-  return useMutation<ValidationRun, ApiError, string | undefined>({
+  return useUserMutation<ValidationRun, string | undefined>({
     mutationFn: (answer) => validateLab(labId, answer),
     retry: false,
     onSuccess: (run) => storeProgress(client, run.mission.slug, run.progress),

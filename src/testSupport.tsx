@@ -98,13 +98,16 @@ export const api = {
   },
 }
 
+// Renders the app at `path`. The query client is returned too, for tests that check
+// what the cache holds rather than only what is on screen.
 export function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const result = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
   )
+  return Object.assign(result, { client })
 }
