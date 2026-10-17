@@ -4,7 +4,7 @@ import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
 import { App } from './App.tsx'
-import type { CatalogModule, MissionCard, MissionDetail } from './catalog/api.ts'
+import type { CatalogModule, MissionCard, MissionDetail, Progress } from './catalog/api.ts'
 import type { Lab } from './lab/api.ts'
 
 export type Route = (init: RequestInit | undefined) => Response | Promise<Response>
@@ -40,8 +40,19 @@ export function missionCard(overrides: Partial<MissionCard> = {}): MissionCard {
     tags: ['permissions'],
     version: 1,
     requires_answer: false,
+    progress: notCompleted,
     ...overrides,
   }
+}
+
+export const notCompleted: Progress = {
+  status: 'not_completed',
+  completed_version: null,
+  completed_at: null,
+}
+
+export function completed(version = 1): Progress {
+  return { status: 'completed', completed_version: version, completed_at: '2026-10-17T14:03:12Z' }
 }
 
 export function catalogModule(overrides: Partial<CatalogModule> = {}): CatalogModule {
@@ -57,6 +68,7 @@ export function catalogModule(overrides: Partial<CatalogModule> = {}): CatalogMo
 export function missionDetail(overrides: Partial<MissionDetail> = {}): MissionDetail {
   return {
     ...missionCard(),
+    current_version: 1,
     module: { slug: 'alpha', title: 'Módulo de teste' },
     briefing: '# Arquivo de teste\n\nO arquivo `~/sample.sh` pode ser lido por qualquer usuário.\n',
     objectives: ['`~/sample.sh` continua existindo.'],

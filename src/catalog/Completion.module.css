@@ -1,0 +1,12 @@
+.completion {
+  font-size: 0.8rem;
+}
+
+.badge {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.version {
+  color: var(--text-muted);
+}

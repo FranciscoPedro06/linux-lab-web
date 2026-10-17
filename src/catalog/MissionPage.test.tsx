@@ -5,6 +5,7 @@ import {
   ana,
   api,
   apiError,
+  completed,
   lab,
   labId,
   missionDetail,
@@ -314,5 +315,47 @@ describe('mission page', () => {
     renderAt('/missions/a%2Fb')
 
     expect((await screen.findByRole('alert')).textContent).toBe('Missão não encontrada.')
+  })
+})
+
+describe('progress on the mission page', () => {
+  async function header() {
+    const title = await screen.findByRole('heading', { level: 1, name: 'Arquivo de teste' })
+    const element = title.closest('header')
+    if (!element) throw new Error('no header')
+    return element
+  }
+
+  it('shows nothing for a mission not completed', async () => {
+    mission()
+    renderAt(path)
+
+    expect((await header()).textContent).not.toContain('Concluída')
+  })
+
+  it('shows a completed mission', async () => {
+    mission({ progress: completed() })
+    renderAt(path)
+
+    expect((await header()).textContent).toContain('Concluída')
+    expect((await header()).textContent).not.toContain('na versão')
+  })
+
+  it('names the version of a completion recorded before the current one', async () => {
+    mission({ version: 2, current_version: 2, progress: completed(1) })
+    renderAt(path)
+
+    expect((await header()).textContent).toContain('Concluída na versão 1')
+  })
+
+  it('compares the completion with the catalog version, not with the lab version shown', async () => {
+    // The user's lab is on version 1, the catalog on version 2, and the mission was
+    // completed on version 2 with an earlier lab.
+    mission({ version: 1, current_version: 2, progress: completed(2) })
+    renderAt(path)
+
+    const text = (await header()).textContent
+    expect(text).toContain('Concluída')
+    expect(text).not.toContain('na versão')
   })
 })
