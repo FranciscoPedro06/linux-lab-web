@@ -1,6 +1,7 @@
 // A fake API and a renderer for page tests in jsdom.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
 import { App } from './App.tsx'
@@ -105,15 +106,17 @@ export const api = {
 }
 
 // Renders the app at `path`. The query client is returned too, for tests that check
-// what the cache holds rather than only what is on screen.
-export function renderAt(path: string) {
+// what the cache holds rather than only what is on screen. With `strict`, effects run,
+// stop and run again, as in development (main.tsx uses StrictMode).
+export function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const result = render(
+  const app = (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <App />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
+  const result = render(strict ? <StrictMode>{app}</StrictMode> : app)
   return Object.assign(result, { client })
 }
