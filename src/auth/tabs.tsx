@@ -79,7 +79,17 @@ class TabSession {
   constructor(
     private readonly client: QueryClient,
     private readonly setVeiled: (veiled: boolean) => void,
+    private readonly setConfirmed: (user: string | null) => void,
   ) {}
+
+  // Asks again who is signed in (behind the lock) when the session check named a user
+  // this tab has not confirmed.
+  revalidate() {
+    if (!this.switching && !this.pending) {
+      this.hide()
+      void this.resume()
+    }
+  }
 
   start() {
     // The cached labs and catalog belong to the user of the last answered session
@@ -231,11 +241,24 @@ class TabSession {
     await this.client.refetchQueries({ queryKey: meKey })
     if (controller.signal.aborted) return
     this.pending = null
+    // Pages are shown once React renders this user: the answer reaches the pages on a
+    // later notification than this line, and until then they still show the previous
+    // one.
+    this.setConfirmed(this.client.getQueryData<User | null>(meKey)?.id ?? null)
     this.setVeiled(false)
   }
 }
 
 const TabSessionContext = createContext<TabSession | null>(null)
+// The user this tab last confirmed behind the lock (null: nobody).
+const ConfirmedUserContext = createContext<string | null>(null)
+
+// Pages are keyed by this, not by the session check: a context change re-renders
+// them in the same render that shows them, so they never appear with the previous
+// user's tree.
+export function useConfirmedUser(): string | null {
+  return useContext(ConfirmedUserContext)
+}
 
 // Runs a session change in coordination with the other tabs.
 export function useSessionChange(): TabSession['change'] {
@@ -246,27 +269,37 @@ export function useSessionChange(): TabSession['change'] {
 
 // Wraps the pages: they stay mounted (an open terminal keeps its connection) but are
 // hidden while this tab may not show private data. Only pages of a signed-in user
-// hold private data; login, sign-up and loading pages are never hidden.
+// hold private data; login, sign-up and loading pages are never hidden. Pages of a
+// user are shown only if this tab confirmed that user behind the lock; a session
+// check naming anyone else hides them until the tab confirms again.
 export function SessionTabs({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const [veiled, setVeiled] = useState(true)
-  const [session] = useState(() => new TabSession(client, setVeiled))
+  const [confirmed, setConfirmed] = useState<string | null>(null)
+  const [session] = useState(() => new TabSession(client, setVeiled, setConfirmed))
   const user = useQuery({ queryKey: meKey, queryFn: () => fetchMe() }).data
-  const hidden = veiled && Boolean(user)
+  const unconfirmed = Boolean(user) && user?.id !== confirmed
+  const hidden = Boolean(user) && (veiled || unconfirmed)
 
   useEffect(() => {
     session.start()
     return () => session.stop()
   }, [session])
 
+  useEffect(() => {
+    if (unconfirmed && !veiled) session.revalidate()
+  }, [session, unconfirmed, veiled])
+
   return (
     <TabSessionContext.Provider value={session}>
-      <div hidden={hidden}>{children}</div>
-      {hidden && (
-        <p className={styles.muted} role="status">
-          Carregando…
-        </p>
-      )}
+      <ConfirmedUserContext.Provider value={confirmed}>
+        <div hidden={hidden}>{children}</div>
+        {hidden && (
+          <p className={styles.muted} role="status">
+            Carregando…
+          </p>
+        )}
+      </ConfirmedUserContext.Provider>
     </TabSessionContext.Provider>
   )
 }
