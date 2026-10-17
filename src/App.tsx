@@ -1,11 +1,13 @@
 import { Navigate, Route, Routes } from 'react-router'
 import { LoginPage } from './auth/LoginPage.tsx'
+import { useSessionSync } from './auth/session.ts'
 import { SignupPage } from './auth/SignupPage.tsx'
 import { MissionPage } from './catalog/MissionPage.tsx'
 import { HomePage } from './HomePage.tsx'
 import { LabPage } from './lab/LabPage.tsx'
 
 export function App() {
+  useSessionSync()
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
