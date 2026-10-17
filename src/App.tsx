@@ -1,15 +1,29 @@
 import { Navigate, Route, Routes } from 'react-router'
 import { LoginPage } from './auth/LoginPage.tsx'
-import { useSessionSync } from './auth/session.ts'
+import { useAuth } from './auth/session.ts'
+import { SessionTabs } from './auth/tabs.tsx'
 import { SignupPage } from './auth/SignupPage.tsx'
 import { MissionPage } from './catalog/MissionPage.tsx'
 import { HomePage } from './HomePage.tsx'
 import { LabPage } from './lab/LabPage.tsx'
 
 export function App() {
-  useSessionSync()
   return (
-    <Routes>
+    <SessionTabs>
+      <Pages />
+    </SessionTabs>
+  )
+}
+
+// The pages are mounted again whenever the signed-in user changes, so nothing a page
+// holds for one user (a validation result, a typed answer, an open terminal) is shown
+// to the next. Only the user matters: loading, error and signed-out share one key, so
+// a failing session check does not remount (and refetch) in a loop.
+function Pages() {
+  const auth = useAuth()
+  const owner = auth.status === 'authenticated' ? auth.user.id : 'nobody'
+  return (
+    <Routes key={owner}>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
