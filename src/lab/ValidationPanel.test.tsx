@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ana, api, apiError, lab, labId, missionDetail, renderAt } from '../testSupport.tsx'
+import {
+  ana,
+  api,
+  apiError,
+  completed,
+  lab,
+  labId,
+  missionDetail,
+  notCompleted,
+  renderAt,
+} from '../testSupport.tsx'
 import type { ValidationRun } from './api.ts'
 
 vi.mock('../terminal/Terminal.tsx', () => ({
@@ -15,7 +25,9 @@ function run(overrides: Partial<ValidationRun> = {}): ValidationRun {
   return {
     run_id: 1,
     outcome: 'failed',
+    newly_completed: false,
     mission: { slug: 'sample-file', version: 1 },
+    progress: notCompleted,
     result: {
       kind: 'all',
       status: 'failed',
@@ -27,6 +39,11 @@ function run(overrides: Partial<ValidationRun> = {}): ValidationRun {
     },
     ...overrides,
   }
+}
+
+// The run that records the user's first completion of the mission.
+function firstPass(): ValidationRun {
+  return run({ outcome: 'passed', newly_completed: true, progress: completed() })
 }
 
 function sentBodies(): unknown[] {
@@ -58,7 +75,7 @@ afterEach(() => {
 
 describe('validation panel', () => {
   it('validates only when asked, with an empty body', async () => {
-    api.routes[`POST ${validatePath}`] = () => Response.json(run({ outcome: 'passed' }))
+    api.routes[`POST ${validatePath}`] = () => Response.json(firstPass())
     renderAt(path)
 
     await screen.findByRole('button', { name: 'Verificar' })
@@ -147,7 +164,7 @@ describe('validation panel', () => {
     })
     expect(api.calls('POST', validatePath)).toBe(1)
 
-    api.routes[`POST ${validatePath}`] = () => Response.json(run({ outcome: 'passed' }))
+    api.routes[`POST ${validatePath}`] = () => Response.json(firstPass())
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
     expect(await screen.findByText(/Missão concluída/)).toBeTruthy()
     expect(api.calls('POST', validatePath)).toBe(2)
@@ -210,7 +227,7 @@ describe('validation panel', () => {
   it('asks for an answer when the mission requires one', async () => {
     api.routes['GET /api/missions/sample-file'] = () =>
       Response.json(missionDetail({ requires_answer: true }))
-    api.routes[`POST ${validatePath}`] = () => Response.json(run({ outcome: 'passed' }))
+    api.routes[`POST ${validatePath}`] = () => Response.json(firstPass())
     renderAt(path)
 
     const input = await screen.findByLabelText('Sua resposta')
@@ -251,5 +268,129 @@ describe('validation panel', () => {
 
     expect(await screen.findByText(/Missão ainda não concluída/)).toBeTruthy()
     expect(sentBodies()).toEqual([{}])
+  })
+})
+
+describe('validation and progress', () => {
+  const missionPath = '/api/missions/sample-file'
+
+  // Opens the mission page from the lab page. Its detail is refetched on mount; the
+  // request never answers, so the page shows what the cache holds.
+  async function openMissionFromCache() {
+    api.routes['GET /api/labs/current'] = () => Response.json(lab())
+    api.routes[`GET ${missionPath}`] = () => new Promise<Response>(() => {})
+    fireEvent.click(screen.getByRole('link', { name: 'Arquivo de teste' }))
+    const title = await screen.findByRole('heading', { level: 1, name: 'Arquivo de teste' })
+    return title.closest('header')?.textContent ?? ''
+  }
+
+  it('announces a first completion and stores it in the cached mission', async () => {
+    api.routes[`POST ${validatePath}`] = () => Response.json(firstPass())
+    renderAt(path)
+
+    await verify()
+
+    expect(await screen.findByText(/Missão concluída/)).toBeTruthy()
+    expect(screen.queryByText(/já estava concluída/)).toBeNull()
+    // Stored from the response, not refetched.
+    expect(api.calls('GET', missionPath)).toBe(1)
+    expect(await openMissionFromCache()).toContain('Concluída')
+  })
+
+  it('says a passing run did not complete a mission completed before', async () => {
+    api.routes[`GET ${missionPath}`] = () => Response.json(missionDetail({ progress: completed() }))
+    api.routes[`POST ${validatePath}`] = () =>
+      Response.json(run({ outcome: 'passed', newly_completed: false, progress: completed() }))
+    renderAt(path)
+
+    await verify()
+
+    expect(
+      await screen.findByText('O laboratório atende a todos os critérios. Esta missão já estava concluída.'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Missão concluída/)).toBeNull()
+  })
+
+  it('keeps an earlier completion when the lab no longer passes', async () => {
+    api.routes[`GET ${missionPath}`] = () => Response.json(missionDetail({ progress: completed() }))
+    api.routes[`POST ${validatePath}`] = () => Response.json(run({ progress: completed() }))
+    renderAt(path)
+
+    await verify()
+
+    expect(await screen.findByText(/Sua conclusão desta missão continua registrada/)).toBeTruthy()
+    expect(screen.queryByText(/Missão ainda não concluída/)).toBeNull()
+    expect(await openMissionFromCache()).toContain('Concluída')
+  })
+
+  it('reports a student failure without a completion', async () => {
+    api.routes[`POST ${validatePath}`] = () => Response.json(run())
+    renderAt(path)
+
+    await verify()
+
+    expect(await screen.findByText(/Missão ainda não concluída/)).toBeTruthy()
+    expect(await openMissionFromCache()).not.toContain('Concluída')
+  })
+
+  it('reports an operational error as such and leaves progress alone', async () => {
+    api.routes[`GET ${missionPath}`] = () => Response.json(missionDetail({ progress: completed() }))
+    api.routes[`POST ${validatePath}`] = () =>
+      Response.json(run({ outcome: 'error', result: null, progress: completed() }))
+    renderAt(path)
+
+    await verify()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Não foi possível verificar o laboratório agora.')
+    expect(alert.textContent).toContain('Isso não conta como tentativa.')
+    expect(screen.queryByText(/Missão ainda não concluída/)).toBeNull()
+    expect(api.calls('GET', missionPath)).toBe(1)
+    expect(await openMissionFromCache()).toContain('Concluída')
+  })
+
+  it('reads progress again after a network failure, without validating again', async () => {
+    api.routes[`POST ${validatePath}`] = () => Promise.reject(new TypeError('Failed to fetch'))
+    renderAt(path)
+    await screen.findByRole('button', { name: 'Verificar' })
+    // The validation was stored before the connection dropped.
+    api.routes[`GET ${missionPath}`] = () => Response.json(missionDetail({ progress: completed() }))
+
+    await verify()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Não foi possível contatar o servidor.')
+    expect(alert.textContent).toContain('pode ter sido registrada')
+    await vi.waitFor(() => expect(api.calls('GET', missionPath)).toBe(2))
+    expect(api.calls('POST', validatePath)).toBe(1)
+    expect(await openMissionFromCache()).toContain('Concluída')
+  })
+
+  it('reads progress again after a server error', async () => {
+    api.routes[`POST ${validatePath}`] = apiError(502, 'unexpected_response', 'Erro no servidor.')
+    renderAt(path)
+
+    await verify()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Erro no servidor.')
+    await vi.waitFor(() => expect(api.calls('GET', missionPath)).toBe(2))
+    expect(api.calls('POST', validatePath)).toBe(1)
+  })
+
+  it('does not read progress again after a refusal', async () => {
+    api.routes[`POST ${validatePath}`] = apiError(
+      409,
+      'validation_in_progress',
+      'Uma verificação deste laboratório já está em andamento.',
+    )
+    renderAt(path)
+
+    await verify()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('já está em andamento')
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(api.calls('GET', missionPath)).toBe(1)
   })
 })

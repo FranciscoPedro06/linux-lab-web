@@ -20,7 +20,7 @@ const statusLabel: Record<ValidationStatus, string> = {
 // Checks the lab's state when the student asks. The API decides the outcome from the
 // mission version the lab was created for; nothing is validated automatically.
 export function ValidationPanel({ labId, mission }: { labId: string; mission: LabMission }) {
-  const validate = useValidateLab(labId)
+  const validate = useValidateLab(labId, mission.slug)
   // The mission detail, read at the lab's version, says whether an answer is expected.
   // While it loads, or if it cannot be read, the panel validates without one.
   const detail = useMission(mission.slug)
@@ -74,6 +74,12 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
       {!validate.isPending && validate.error && (
         <div className={styles.outcome} role="alert">
           <p className={styles.error}>{validate.error.message}</p>
+          {validate.error.status === 0 && (
+            <p className={styles.muted}>
+              A verificação pode ter sido registrada antes de a conexão cair. Seu progresso é
+              atualizado a partir do servidor.
+            </p>
+          )}
           {validate.error.code !== 'lab_not_ready' && validate.error.status !== 404 && (
             <button type="button" onClick={run}>
               Tentar novamente
@@ -86,16 +92,31 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
   )
 }
 
+// A passed run is a new completion only when the API says this run recorded it; a
+// completion recorded earlier stays whatever later runs return.
 function Outcome({ run, retry }: { run: ValidationRun; retry: () => void }) {
+  const completedBefore = !run.newly_completed && run.progress.status === 'completed'
   return (
     <div className={styles.outcome} data-outcome={run.outcome}>
-      {run.outcome === 'passed' && (
+      {run.outcome === 'passed' && run.newly_completed && (
         <p className={styles.passed} role="status">
           Missão concluída: o laboratório atende a todos os critérios.
         </p>
       )}
-      {run.outcome === 'failed' && (
+      {run.outcome === 'passed' && !run.newly_completed && (
+        <p className={styles.passed} role="status">
+          O laboratório atende a todos os critérios.{' '}
+          {completedBefore && 'Esta missão já estava concluída.'}
+        </p>
+      )}
+      {run.outcome === 'failed' && !completedBefore && (
         <p role="status">Missão ainda não concluída. Veja os critérios abaixo.</p>
+      )}
+      {run.outcome === 'failed' && completedBefore && (
+        <p role="status">
+          O laboratório não atende a todos os critérios agora. Sua conclusão desta missão continua
+          registrada.
+        </p>
       )}
       {run.outcome === 'error' && (
         <>
