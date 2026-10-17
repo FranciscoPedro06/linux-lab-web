@@ -45,8 +45,8 @@ function pending() {
 }
 
 // A tab: an app rendered in its own container with its own query client.
-function openTab(path: string) {
-  const { container, client } = renderAt(path)
+function openTab(path: string, options: { strict?: boolean } = {}) {
+  const { container, client } = renderAt(path, options)
   const tab = within(container as HTMLElement)
   return {
     client,
@@ -204,6 +204,25 @@ describe('a session change waits for every visible tab', () => {
     // The refused request left no exclusive request behind.
     expect(locks.waiting(LOCK)).not.toContain('exclusive')
     stuck.close()
+  })
+})
+
+describe('lock bookkeeping', () => {
+  it('holds one shared lock per tab when effects run twice, so changes are not refused', async () => {
+    // StrictMode starts, stops and starts the tab session; a lock granted to the
+    // request given up in between must be released, not kept for good.
+    const first = openTab('/', { strict: true })
+    await anaHomeIn(first)
+    server.user = null
+    const second = openTab('/login', { strict: true })
+    await second.tab.findByRole('heading', { name: 'Entrar' })
+    await vi.waitFor(() => expect(locks.holders(LOCK)).toEqual(['shared', 'shared']))
+
+    await signInAsBia(second)
+
+    await second.tab.findByText('Olá, Bia.')
+    expect(api.calls('POST', '/api/auth/login')).toBe(1)
+    await first.tab.findByText('Olá, Bia.')
   })
 })
 

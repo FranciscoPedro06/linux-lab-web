@@ -209,6 +209,13 @@ class TabSession {
         await new Promise<void>((granted, failed) => {
           locks
             .request(LOCK, { mode: 'shared', signal: controller.signal }, () => {
+              // Granted after this request was given up (aborting does nothing once
+              // the browser granted it): let go at once, or the lock would be held
+              // for good and every session change refused.
+              if (controller.signal.aborted) {
+                failed(controller.signal.reason)
+                return undefined
+              }
               granted()
               return new Promise<void>((released) => {
                 this.release = released
