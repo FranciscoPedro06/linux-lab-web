@@ -1,5 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ApiError } from '../auth/api.ts'
+import type { CatalogModule, MissionDetail, Progress } from '../catalog/api.ts'
+import { catalogKeys } from '../catalog/queries.ts'
 import {
   createLab,
   endLab,
@@ -78,17 +80,48 @@ export function useEndLab() {
   return useMutation<Lab, ApiError, string>({ mutationFn: (id) => endLab(id), onSuccess: store })
 }
 
+// Whether a failed validation request may still have been stored: the connection was
+// lost, or something between the client and the API failed, possibly after the commit.
+// A refusal from the API itself (4xx) stored nothing.
+function outcomeUnknown(error: ApiError): boolean {
+  return error.status === 0 || error.status >= 500
+}
+
 // Validation runs only when the student asks: no retry, no polling. A refusal because
 // the lab is no longer usable refreshes the lab, so the page shows its state.
-export function useValidateLab(labId: string) {
+//
+// The response carries the user's progress on the mission, which is copied into the
+// cached catalog and mission detail. When the request failed in a way that leaves the
+// outcome unknown, those are fetched again instead, since a completion may have been
+// recorded before the response was lost.
+export function useValidateLab(labId: string, missionSlug: string) {
   const client = useQueryClient()
   return useMutation<ValidationRun, ApiError, string | undefined>({
     mutationFn: (answer) => validateLab(labId, answer),
     retry: false,
+    onSuccess: (run) => storeProgress(client, run.mission.slug, run.progress),
     onError: (error) => {
       if (error.status === 404 || error.code === 'lab_not_ready') {
         void client.invalidateQueries({ queryKey: labKeys.one(labId) })
       }
+      if (outcomeUnknown(error)) {
+        void client.invalidateQueries({ queryKey: catalogKeys.modules })
+        void client.invalidateQueries({ queryKey: catalogKeys.mission(missionSlug) })
+      }
     },
   })
+}
+
+// Progress belongs to the mission, not to a version, so it applies to the detail
+// whichever version it shows. Queries without data are left alone.
+function storeProgress(client: QueryClient, slug: string, progress: Progress) {
+  client.setQueryData<MissionDetail>(catalogKeys.mission(slug), (detail) =>
+    detail ? { ...detail, progress } : detail,
+  )
+  client.setQueryData<CatalogModule[]>(catalogKeys.modules, (modules) =>
+    modules?.map((module) => ({
+      ...module,
+      missions: module.missions.map((card) => (card.slug === slug ? { ...card, progress } : card)),
+    })),
+  )
 }

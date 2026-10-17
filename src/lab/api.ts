@@ -1,6 +1,7 @@
 // Client for the lab endpoints (see docs/api.md in linux-lab-api). The API owns the
 // lifecycle; this code only reads it and asks for changes.
 import { apiRequest, ApiError } from '../auth/api.ts'
+import type { Progress } from '../catalog/api.ts'
 
 export type LabStatus = 'provisioning' | 'ready' | 'terminating' | 'terminated' | 'failed'
 
@@ -124,9 +125,15 @@ export type ResultNode = CheckResult | OperatorResult
 
 export type ValidationRun = {
   run_id: number
-  // passed: the mission is complete; failed: not yet; error: the check could not run.
+  // passed: the lab meets the mission's conditions; failed: not yet; error: the check
+  // could not run, which is not the student's failure.
   outcome: ValidationStatus
+  // true only for the validation that recorded the user's first completion.
+  newly_completed: boolean
+  // The mission version the lab was created for.
   mission: { slug: string; version: number }
+  // The user's progress on the mission after this run, whatever its outcome.
+  progress: Progress
   // null only when the server could not read the mission's conditions.
   result: ResultNode | null
 }
