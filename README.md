@@ -2,7 +2,7 @@
 
 Web interface for Linux Lab, a platform for learning Linux by solving problems in a real terminal, inside an isolated environment created for each student.
 
-This repository holds the frontend. Today it contains login, sign-up, the signed-in home with the user's lab and the mission catalog, a page for each mission that starts its lab, and the lab page with its terminal and the validation of the lab's state; the progress dashboard is planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
+This repository holds the frontend. Today it contains login, sign-up, the signed-in home with the user's lab and the mission catalog, a page for each mission that starts its lab, and the lab page with its terminal and the validation of the lab's state, with the user's progress on each mission in the catalog and on the mission page. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
 
 ## Why
 
@@ -20,9 +20,13 @@ Frontend and API are served from the same origin. The session is an `HttpOnly` c
 
 A user has one active lab. While it exists, the page of another mission says that switching missions is not available yet and links to the current lab; it never replaces it.
 
-On the lab page, the student asks the API to verify the lab and sees whether the mission is complete, condition by condition.
+On the lab page, the student asks the API to verify the lab and sees, condition by condition, whether the lab meets the mission. The first validation that passes records the completion of the mission, which the panel announces; a later one says the mission was already completed, and a failing one that the earlier completion is kept. An operational error is shown as a failure of the check, not of the student.
 
-Planned, not implemented yet: progress, lab reset and switching a lab to another mission.
+The catalog and the mission page mark completed missions. A completion belongs to the mission, not to a version: one recorded on an earlier version stays a completion and names that version. The mission page compares it with the catalog's version, not with the version of the user's lab it may be showing.
+
+After a validation, the progress in the response replaces the cached one in the catalog and the mission detail. If the request fails without an answer from the API (a dropped connection or a 5xx), the completion may have been stored anyway, so both are read again from the API; the validation itself is never retried.
+
+Planned, not implemented yet: lab reset, switching a lab to another mission, and the explanation and solutions after completion (a candidate for increment 14).
 
 The interface text is in Portuguese.
 
@@ -32,10 +36,10 @@ The interface text is in Portuguese.
 |---|---|---|
 | `/login` | Email and password | Implemented |
 | `/signup` | Name, email, password and invite code (required during the closed beta) | Implemented |
-| `/` | Signed out: links to login and sign-up. Signed in: the current lab and its mission (preparing, ready with a link to its terminal and an end button, ending), the published modules and their missions, previous labs with their mission and end reason, and logout | Implemented; progress is added later |
+| `/` | Signed out: links to login and sign-up. Signed in: the current lab and its mission (preparing, ready with a link to its terminal and an end button, ending), the published modules and their missions, previous labs with their mission and end reason, and logout. Completed missions are marked | Implemented |
 | `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal and the validation panel, or ended with the reason and a button to start a new lab for the same mission. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
-| `/missions/:slug` | Module, title, summary, difficulty, estimated time and tags; the problem (Markdown), objectives and hints; the user's lab for it: a button to start one, a link to the one already open for this mission, or, when the active lab is for another mission, a notice and a link to it. Requires a session; an unknown or unpublished mission shows "not found" | Implemented |
-| `/missions/:slug` with a lab | Reset, and the explanation after completion; the terminal and validation stay on `/labs/:id` | Planned |
+| `/missions/:slug` | Module, title, summary, difficulty, estimated time and tags; the problem (Markdown), objectives and hints; the user's lab for it: a button to start one, a link to the one already open for this mission, or, when the active lab is for another mission, a notice and a link to it; whether the user completed the mission, and on which version if not the current one. Requires a session; an unknown or unpublished mission shows "not found" | Implemented |
+| `/missions/:slug` with a lab | Reset (increment 10), and the explanation and solutions after completion (candidate for increment 14); the terminal and validation stay on `/labs/:id` | Planned |
 
 Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` is sent to `/`; a signed-out visitor who opens `/labs/:id` or `/missions/:slug` is sent to `/login`. The old development entry `/?lab=<id>` no longer opens anything.
 
@@ -127,13 +131,13 @@ npm run build
 
 CI runs the same commands.
 
-- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home, lab and mission pages against a fake `fetch`, including lab states, OOM, 4401, 4410, automatic reconnection with fake timers, the catalog's empty, error and not found states, Markdown with raw HTML, and the validation panel (loading, concluded, not concluded, operational error, refusals, the answer field and the absence of automatic retries).
+- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home, lab and mission pages against a fake `fetch`, including lab states, OOM, 4401, 4410, automatic reconnection with fake timers, the catalog's empty, error and not found states, Markdown with raw HTML, the validation panel (loading, first completion, a mission completed before, a failure after a completion, operational error, refusals, the answer field and the absence of automatic retries), and progress (completed and not completed missions, a completion on an earlier version, the cache updated from the response, and progress read again after a network or server failure).
 - **Browser:** each increment is checked by hand in Chromium (Playwright) against the Compose environment, with real cookies, WebSocket and Docker; an automated end-to-end suite is planned.
 - **TypeScript** in strict mode.
 
 ## Status
 
-Increments 01 and 03 to 08 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, and the validation panel on the lab page. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
+Increments 01 and 03 to 09 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, the validation panel on the lab page, and the user's progress in the catalog, the mission page and the panel. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
 
 ## License
 
