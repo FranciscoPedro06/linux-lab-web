@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ApiError,
   type LoginInput,
@@ -29,11 +29,22 @@ export function useAuth(): AuthState {
   return query.data ? { status: 'authenticated', user: query.data } : { status: 'anonymous' }
 }
 
+// Labs and the catalog (which carries the user's progress) belong to one user. They
+// are dropped whenever the session changes, so a new session never shows what was
+// cached for the previous one, including after a session that expired without logout.
+function forgetUserData(client: QueryClient) {
+  client.removeQueries({ queryKey: ['labs'] })
+  client.removeQueries({ queryKey: ['catalog'] })
+}
+
 export function useLogin() {
   const client = useQueryClient()
   return useMutation<User, ApiError, LoginInput>({
     mutationFn: (input) => login(input),
-    onSuccess: (user) => client.setQueryData(meKey, user),
+    onSuccess: (user) => {
+      forgetUserData(client)
+      client.setQueryData(meKey, user)
+    },
   })
 }
 
@@ -41,7 +52,10 @@ export function useSignup() {
   const client = useQueryClient()
   return useMutation<User, ApiError, SignupInput>({
     mutationFn: (input) => signup(input),
-    onSuccess: (user) => client.setQueryData(meKey, user),
+    onSuccess: (user) => {
+      forgetUserData(client)
+      client.setQueryData(meKey, user)
+    },
   })
 }
 
@@ -52,8 +66,7 @@ export function useLogout() {
   return useMutation<void, ApiError>({
     mutationFn: () => logout(),
     onSuccess: () => {
-      client.removeQueries({ queryKey: ['labs'] })
-      client.removeQueries({ queryKey: ['catalog'] })
+      forgetUserData(client)
       client.setQueryData(meKey, null)
     },
   })
