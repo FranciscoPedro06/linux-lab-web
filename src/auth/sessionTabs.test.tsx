@@ -50,6 +50,7 @@ function openTab(path: string, options: { strict?: boolean } = {}) {
   const tab = within(container as HTMLElement)
   return {
     client,
+    container: container as HTMLElement,
     tab,
     // Whether this tab shows private pages (hidden ones are not accessible).
     showsCatalog: () => tab.queryByRole('region', { name: 'Missões' }) !== null,
@@ -204,6 +205,78 @@ describe('a session change waits for every visible tab', () => {
     // The refused request left no exclusive request behind.
     expect(locks.waiting(LOCK)).not.toContain('exclusive')
     stuck.close()
+  })
+})
+
+describe('showing the confirmed user', () => {
+  it("never shows the previous user's pages once the new user is confirmed", async () => {
+    // The answer to the session check reaches the pages on a later notification than
+    // the one that confirms it; pages must not be shown in between.
+    for (let round = 0; round < 10; round++) {
+      server.user = ana
+      const tab = openTab('/')
+      await anaHomeIn(tab)
+      // After any DOM change: is Ana's greeting in the page, and is it hidden?
+      const violations: string[] = []
+      let hiddenOnce = false
+      const observer = new MutationObserver(() => {
+        const greeting = tab.tab.queryByText('Olá, Ana.')
+        if (!greeting) return
+        if (greeting.closest('[hidden]')) hiddenOnce = true
+        else if (hiddenOnce) violations.push('Ana shown again after the change began')
+      })
+      observer.observe(document.body, { attributes: true, subtree: true, childList: true })
+      const other = otherTab()
+      other.post('session-changing')
+      await vi.waitFor(() => expect(tab.showsCatalog()).toBe(false))
+      server.user = bia
+      other.post('session-changed')
+      other.close()
+      await tab.tab.findByText('Olá, Bia.')
+      await act(async () => {})
+      observer.disconnect()
+      expect(violations).toEqual([])
+      cleanup()
+    }
+  })
+})
+
+describe('a session check that names another user', () => {
+  it('hides the pages at once and shows the new user only after confirming behind the lock', async () => {
+    const tab = openTab('/')
+    await anaHomeIn(tab)
+    // Bia's session, learned from a background check, not from another tab.
+    server.user = bia
+    const confirmation = pending()
+    let checks = 0
+    api.routes['GET /api/auth/me'] = () => {
+      checks += 1
+      return checks === 1 ? Response.json(bia) : confirmation.route()
+    }
+    // Every commit until the confirmation: the private area must stay hidden.
+    const area = tab.container.firstElementChild as HTMLElement
+    const shownBeforeConfirmation: string[] = []
+    let confirmed = false
+    const observer = new MutationObserver(() => {
+      if (!confirmed && !area.hidden && /Olá, /.test(area.textContent ?? '')) {
+        shownBeforeConfirmation.push(area.textContent?.match(/Olá, \w+\./)?.[0] ?? '')
+      }
+    })
+    observer.observe(area, { attributes: true, subtree: true, childList: true, characterData: true })
+
+    await act(async () => {
+      await tab.client.refetchQueries({ queryKey: ['auth', 'me'] })
+    })
+    await vi.waitFor(() => expect(checks).toBe(2))
+    expect(tab.showsCatalog()).toBe(false)
+    confirmed = true
+    confirmation.release(() => Response.json(bia))
+    await tab.tab.findByText('Olá, Bia.')
+    observer.disconnect()
+
+    expect(shownBeforeConfirmation).toEqual([])
+    await vi.waitFor(() => expect(tab.catalogText()).toContain('Arquivo de teste'))
+    expect(tab.catalogText()).not.toContain('Concluída')
   })
 })
 
