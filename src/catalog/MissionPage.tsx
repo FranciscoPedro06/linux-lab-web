@@ -4,6 +4,7 @@ import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { Lab } from '../lab/api.ts'
 import { useCreateLab, useCurrentLab } from '../lab/queries.ts'
 import { difficultyLabel, type MissionDetail, minutesLabel } from './api.ts'
+import { Completion } from './Completion.tsx'
 import { InlineMarkdown, Markdown } from './Markdown.tsx'
 import styles from './MissionPage.module.css'
 import { useMission } from './queries.ts'
@@ -51,6 +52,12 @@ function Mission({ mission }: { mission: MissionDetail }) {
           {difficultyLabel(mission.difficulty)} · {minutesLabel(mission.estimated_minutes)}
           {mission.tags.length > 0 && <> · {mission.tags.join(', ')}</>}
         </p>
+        {/* Compared with the catalog's version, not with an older lab's. */}
+        {mission.progress.status === 'completed' && (
+          <p>
+            <Completion progress={mission.progress} currentVersion={mission.current_version} />
+          </p>
+        )}
       </header>
 
       <MissionLab slug={mission.slug} />

@@ -6,6 +6,7 @@ import {
   api,
   apiError,
   catalogModule,
+  completed,
   lab,
   missionCard,
   missionDetail,
@@ -153,5 +154,41 @@ describe('catalog on the entry page', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Arquivo de teste' }))
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Arquivo de teste' })).toBeTruthy()
+  })
+})
+
+describe('progress in the catalog', () => {
+  async function missionItem(title: string) {
+    const section = await catalogSection()
+    const link = await within(section).findByRole('link', { name: title })
+    const item = link.closest('li')
+    if (!item) throw new Error('no list item')
+    return item
+  }
+
+  it('marks completed missions only', async () => {
+    api.routes['GET /api/modules'] = () =>
+      Response.json([
+        catalogModule({
+          missions: [
+            missionCard({ progress: completed() }),
+            missionCard({ slug: 'sample-answer', title: 'Resposta de teste' }),
+          ],
+        }),
+      ])
+    renderAt('/')
+
+    expect((await missionItem('Arquivo de teste')).textContent).toContain('Concluída')
+    expect((await missionItem('Arquivo de teste')).textContent).not.toContain('na versão')
+    expect((await missionItem('Resposta de teste')).textContent).not.toContain('Concluída')
+  })
+
+  it('keeps a completion recorded on an earlier version, naming that version', async () => {
+    api.routes['GET /api/modules'] = () =>
+      Response.json([catalogModule({ missions: [missionCard({ version: 3, progress: completed(1) })] })])
+    renderAt('/')
+
+    const item = await missionItem('Arquivo de teste')
+    expect(item.textContent).toContain('Concluída na versão 1')
   })
 })

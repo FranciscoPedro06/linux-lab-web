@@ -5,6 +5,7 @@ import { useRecheckSession } from '../auth/session.ts'
 import home from '../lab/LabPanel.module.css'
 import { type CatalogModule, difficultyLabel, type MissionCard, minutesLabel } from './api.ts'
 import catalog from './Catalog.module.css'
+import { Completion } from './Completion.tsx'
 import { useModules } from './queries.ts'
 
 // The published modules and their missions, on the signed-in home page.
@@ -67,7 +68,8 @@ function Module({ module }: { module: CatalogModule }) {
 function Mission({ mission }: { mission: MissionCard }) {
   return (
     <li>
-      <Link to={`/missions/${mission.slug}`}>{mission.title}</Link>
+      <Link to={`/missions/${mission.slug}`}>{mission.title}</Link>{' '}
+      <Completion progress={mission.progress} currentVersion={mission.version} />
       <span className={catalog.summary}>{mission.summary}</span>
       <span className={catalog.meta}>
         {difficultyLabel(mission.difficulty)} · {minutesLabel(mission.estimated_minutes)}
