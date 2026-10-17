@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectionStatus } from '../terminal/connection.ts'
-import { ana, api, apiError, lab, labId, renderAt, signedOut } from '../testSupport.tsx'
+import { ana, api, apiError, lab, labId, missionDetail, renderAt, signedOut } from '../testSupport.tsx'
 
 // A stand-in terminal that records its props, so the test can play the connection.
 const terminal = vi.hoisted(() => ({
@@ -44,6 +44,7 @@ beforeEach(() => {
   api.routes = {
     'GET /api/auth/me': () => Response.json(ana),
     [`GET /api/labs/${labId}`]: () => Response.json(lab()),
+    'GET /api/missions/sample-file': () => Response.json(missionDetail()),
   }
   vi.stubGlobal('fetch', api.fetch)
 })

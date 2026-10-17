@@ -100,3 +100,54 @@ export const endReasonMessage: Record<EndReason, string> = {
   provisioning_failed: 'Não foi possível iniciar o laboratório.',
   provisioning_timeout: 'O laboratório demorou demais para iniciar.',
 }
+
+// Validation (POST /api/labs/{id}/validate). The API checks the lab's state against
+// the mission version the lab was created for; the client sends at most an answer.
+export type ValidationStatus = 'passed' | 'failed' | 'error'
+
+export type CheckResult = {
+  kind: 'check'
+  id: string
+  status: ValidationStatus
+  // Written in the mission or a fixed default; never derived from the lab's state.
+  message: string
+}
+
+export type OperatorResult = {
+  kind: 'all' | 'any' | 'not'
+  status: ValidationStatus
+  message: string | null
+  children: ResultNode[]
+}
+
+export type ResultNode = CheckResult | OperatorResult
+
+export type ValidationRun = {
+  run_id: number
+  // passed: the mission is complete; failed: not yet; error: the check could not run.
+  outcome: ValidationStatus
+  mission: { slug: string; version: number }
+  // null only when the server could not read the mission's conditions.
+  result: ResultNode | null
+}
+
+// The API's limit for an answer, in UTF-8 bytes.
+export const MAX_ANSWER_BYTES = 1024
+
+export function answerBytes(answer: string): number {
+  return new TextEncoder().encode(answer).length
+}
+
+export async function validateLab(
+  id: string,
+  answer?: string,
+  fetchImpl?: FetchLike,
+): Promise<ValidationRun> {
+  const run = await apiRequest<ValidationRun>(
+    `/api/labs/${encodeURIComponent(id)}/validate`,
+    { method: 'POST', body: answer === undefined ? {} : { answer } },
+    fetchImpl,
+  )
+  if (!run) throw unexpected()
+  return run
+}

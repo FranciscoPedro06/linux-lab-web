@@ -1,0 +1,115 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.answer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 12rem;
+  font-size: 0.875rem;
+}
+
+.answer input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.panel button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.panel button:disabled {
+  color: var(--text-muted);
+  cursor: progress;
+}
+
+.outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.outcome p,
+.panel > p {
+  margin: 0;
+}
+
+.passed {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.875rem;
+}
+
+.muted {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1rem;
+  list-style: none;
+}
+
+.item {
+  font-size: 0.875rem;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 7.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.item[data-status='passed'] > .badge {
+  color: var(--ok);
+}
+
+.item[data-status='failed'] > .badge,
+.item[data-status='error'] > .badge {
+  color: var(--error);
+}
