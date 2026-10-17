@@ -1,6 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ApiError } from '../auth/api.ts'
-import { createLab, endLab, fetchCurrentLab, fetchLab, fetchLabs, isTransient, type Lab } from './api.ts'
+import {
+  createLab,
+  endLab,
+  fetchCurrentLab,
+  fetchLab,
+  fetchLabs,
+  isTransient,
+  type Lab,
+  validateLab,
+  type ValidationRun,
+} from './api.ts'
 
 // Poll quickly while the API is moving a lab between states, and slowly while it is
 // ready, since the reaper can end it at any time.
@@ -66,4 +76,19 @@ export function useCreateLab() {
 export function useEndLab() {
   const store = useStoreLab()
   return useMutation<Lab, ApiError, string>({ mutationFn: (id) => endLab(id), onSuccess: store })
+}
+
+// Validation runs only when the student asks: no retry, no polling. A refusal because
+// the lab is no longer usable refreshes the lab, so the page shows its state.
+export function useValidateLab(labId: string) {
+  const client = useQueryClient()
+  return useMutation<ValidationRun, ApiError, string | undefined>({
+    mutationFn: (answer) => validateLab(labId, answer),
+    retry: false,
+    onError: (error) => {
+      if (error.status === 404 || error.code === 'lab_not_ready') {
+        void client.invalidateQueries({ queryKey: labKeys.one(labId) })
+      }
+    },
+  })
 }

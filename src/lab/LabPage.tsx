@@ -9,6 +9,7 @@ import { Terminal } from '../terminal/Terminal.tsx'
 import { endReasonMessage, fetchLab, type Lab, type LabMission, statusLabel } from './api.ts'
 import styles from './LabPage.module.css'
 import { labKeys, useCreateLab, useEndLab, useLab } from './queries.ts'
+import { ValidationPanel } from './ValidationPanel.tsx'
 
 const stateLabel: Record<ConnectionStatus['state'], string> = {
   connecting: 'Conectando',
@@ -177,6 +178,7 @@ function ReadyLab({ lab }: { lab: Lab }) {
           onStatus={onStatus}
         />
       </section>
+      {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
       <footer className={styles.actions}>
         <span className={styles.expiry}>
           Encerra automaticamente às {formatTime(lab.expires_at)}.

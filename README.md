@@ -2,7 +2,7 @@
 
 Web interface for Linux Lab, a platform for learning Linux by solving problems in a real terminal, inside an isolated environment created for each student.
 
-This repository holds the frontend. Today it contains login, sign-up, the signed-in home with the user's lab and the mission catalog, a page for each mission that starts its lab, and the lab page with its terminal; the progress dashboard and validation are planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
+This repository holds the frontend. Today it contains login, sign-up, the signed-in home with the user's lab and the mission catalog, a page for each mission that starts its lab, and the lab page with its terminal and the validation of the lab's state; the progress dashboard is planned. The API and the lab runtime live in [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api).
 
 ## Why
 
@@ -20,7 +20,9 @@ Frontend and API are served from the same origin. The session is an `HttpOnly` c
 
 A user has one active lab. While it exists, the page of another mission says that switching missions is not available yet and links to the current lab; it never replaces it.
 
-Planned, not implemented yet: progress, validation of the lab state, lab reset and switching a lab to another mission.
+On the lab page, the student asks the API to verify the lab and sees whether the mission is complete, condition by condition.
+
+Planned, not implemented yet: progress, lab reset and switching a lab to another mission.
 
 The interface text is in Portuguese.
 
@@ -31,9 +33,9 @@ The interface text is in Portuguese.
 | `/login` | Email and password | Implemented |
 | `/signup` | Name, email, password and invite code (required during the closed beta) | Implemented |
 | `/` | Signed out: links to login and sign-up. Signed in: the current lab and its mission (preparing, ready with a link to its terminal and an end button, ending), the published modules and their missions, previous labs with their mission and end reason, and logout | Implemented; progress is added later |
-| `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal, or ended with the reason and a button to start a new lab for the same mission. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
+| `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal and the validation panel, or ended with the reason and a button to start a new lab for the same mission. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
 | `/missions/:slug` | Module, title, summary, difficulty, estimated time and tags; the problem (Markdown), objectives and hints; the user's lab for it: a button to start one, a link to the one already open for this mission, or, when the active lab is for another mission, a notice and a link to it. Requires a session; an unknown or unpublished mission shows "not found" | Implemented |
-| `/missions/:slug` with a lab | Validation, reset, and the explanation after completion; the terminal stays on `/labs/:id` | Planned |
+| `/missions/:slug` with a lab | Reset, and the explanation after completion; the terminal and validation stay on `/labs/:id` | Planned |
 
 Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` is sent to `/`; a signed-out visitor who opens `/labs/:id` or `/missions/:slug` is sent to `/login`. The old development entry `/?lab=<id>` no longer opens anything.
 
@@ -50,6 +52,14 @@ The session cookie is `Secure`. During development, browsers that treat `http://
 `src/lab/api.ts` calls the lab endpoints; `src/lab/queries.ts` keeps them in TanStack Query. The API owns the lifecycle: the client never decides a lab's state, it shows what `GET /api/labs/current` and `GET /api/labs/{id}` report. It polls every second while a lab is `provisioning` or `terminating`, and every 15 seconds while it is `ready`, since the server can end it (timeouts, OOM) at any time. Logout removes every cached lab.
 
 A lab is created with `POST /api/labs` and `{ "mission_slug": ... }`, from the mission's page or, for the same mission, from an ended lab's page. The client sends nothing else; the API picks the mission version, parameters, setup and limits. The request is synchronous and returns once the lab is ready or has failed. The API's error messages (`active_lab_for_different_mission`, `lab_start_failed`, `mission_not_found` and others) are shown as they are, and a refused start refreshes the current lab so the page shows what blocks it.
+
+## Validation
+
+The validation panel sits on `/labs/:id`, below the terminal, so the student checks the lab without leaving it. `validateLab` in `src/lab/api.ts` calls `POST /api/labs/{id}/validate`; `useValidateLab` in `src/lab/queries.ts` runs it as a TanStack Query mutation with no automatic retry. Nothing is validated automatically: the request is sent only when the student presses "Verificar", the button is disabled while it runs, and a failed request is repeated only from an explicit "Tentar novamente".
+
+The body is `{}`, or `{ "answer": ... }` when the mission expects an answer and the field is not empty (an empty field is sent as no answer, which the API reports as such): the panel reads `requires_answer` from `GET /api/missions/{slug}`, which the API answers at the lab's version, and shows the answer field only then. Answers longer than the API's limit (1024 bytes in UTF-8) are refused before sending. The client sends nothing else; the mission version, conditions and limits come from the server.
+
+The response is shown as the API sent it: concluded (`passed`), not yet concluded (`failed`) with the status and message of each condition, or an operational error (`error`), which does not count as an attempt and offers a new try. Messages are plain strings rendered as text. A `409 lab_not_ready` or `404` refreshes the lab, so the page shows that it ended; `409 validation_in_progress` and `429 rate_limited` show the API's message.
 
 ## Catalog
 
@@ -117,13 +127,13 @@ npm run build
 
 CI runs the same commands.
 
-- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home, lab and mission pages against a fake `fetch`, including lab states, OOM, 4401, 4410, automatic reconnection with fake timers, the catalog's empty, error and not found states, and Markdown with raw HTML.
+- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home, lab and mission pages against a fake `fetch`, including lab states, OOM, 4401, 4410, automatic reconnection with fake timers, the catalog's empty, error and not found states, Markdown with raw HTML, and the validation panel (loading, concluded, not concluded, operational error, refusals, the answer field and the absence of automatic retries).
 - **Browser:** each increment is checked by hand in Chromium (Playwright) against the Compose environment, with real cookies, WebSocket and Docker; an automated end-to-end suite is planned.
 - **TypeScript** in strict mode.
 
 ## Status
 
-Increments 01 and 03 to 07 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
+Increments 01 and 03 to 08 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, and the validation panel on the lab page. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
 
 ## License
 
