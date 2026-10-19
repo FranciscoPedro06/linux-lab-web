@@ -1,32 +1,43 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectionStatus } from '../terminal/connection.ts'
 import { ana, api, apiError, lab, labId, missionDetail, renderAt, signedOut } from '../testSupport.tsx'
 
-// A stand-in terminal that records its props, so the test can play the connection.
+// A stand-in terminal that records its props, so the test can play the connection, and
+// which labs have a terminal mounted (unmounting the real one closes its connection).
 const terminal = vi.hoisted(() => ({
   mounts: 0,
   sessions: [] as number[],
   onStatus: null as ((status: ConnectionStatus) => void) | null,
+  mounted: new Set<string>(),
 }))
 
-vi.mock('../terminal/Terminal.tsx', () => ({
-  Terminal: (props: {
-    labId: string
-    session: number
-    closeRequested: boolean
-    onStatus: (status: ConnectionStatus) => void
-  }) => {
-    terminal.onStatus = props.onStatus
-    if (terminal.sessions.at(-1) !== props.session) terminal.sessions.push(props.session)
-    return (
-      <div data-testid="terminal">
-        {props.labId} {props.closeRequested ? 'close requested' : 'open'}
-      </div>
-    )
-  },
-}))
+vi.mock('../terminal/Terminal.tsx', async () => {
+  const { useEffect } = await vi.importActual<typeof import('react')>('react')
+  return {
+    Terminal: (props: {
+      labId: string
+      session: number
+      closeRequested: boolean
+      onStatus: (status: ConnectionStatus) => void
+    }) => {
+      terminal.onStatus = props.onStatus
+      if (terminal.sessions.at(-1) !== props.session) terminal.sessions.push(props.session)
+      useEffect(() => {
+        terminal.mounted.add(props.labId)
+        return () => {
+          terminal.mounted.delete(props.labId)
+        }
+      }, [props.labId])
+      return (
+        <div data-testid="terminal">
+          {props.labId} {props.closeRequested ? 'close requested' : 'open'}
+        </div>
+      )
+    },
+  }
+})
 
 const path = `/labs/${labId}`
 
@@ -41,6 +52,7 @@ function connected() {
 beforeEach(() => {
   terminal.sessions = []
   terminal.onStatus = null
+  terminal.mounted.clear()
   api.routes = {
     'GET /api/auth/me': () => Response.json(ana),
     [`GET /api/labs/${labId}`]: () => Response.json(lab()),
@@ -293,5 +305,212 @@ describe('terminal close codes', () => {
 
     expect(screen.getByRole('status').textContent).toMatch(/tentativa 2 de 5/)
     expect(terminal.sessions).toEqual([0])
+  })
+})
+
+describe('resetting the lab', () => {
+  const newLabId = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
+  const replacePath = `/api/labs/${labId}/replace`
+  const replaced = lab({ status: 'terminated', end_reason: 'reset', ended_at: 'x' })
+
+  function oldLab(value: ReturnType<typeof lab>) {
+    api.routes[`GET /api/labs/${labId}`] = () => Response.json(value)
+  }
+
+  function currentLab(value: ReturnType<typeof lab> | null) {
+    api.routes['GET /api/labs/current'] = () => Response.json(value)
+  }
+
+  function opens(created: ReturnType<typeof lab>) {
+    api.routes[`GET /api/labs/${created.id}`] = () => Response.json(created)
+  }
+
+  async function confirmReset() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Reiniciar laboratório' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Reiniciar o laboratório?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Descartar e reiniciar' }))
+  }
+
+  function failWith(status: number, code: string, message: string, after?: () => void): void {
+    api.routes[`POST ${replacePath}`] = () => {
+      after?.()
+      return Response.json({ error: { code, message } }, { status })
+    }
+  }
+
+  beforeEach(() => {
+    currentLab(lab())
+  })
+
+  it('asks first, saying what is discarded and that progress is kept', async () => {
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reiniciar laboratório' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Reiniciar o laboratório?' })
+    expect(dialog.textContent).toContain('Os arquivos, os processos e todo o estado temporário')
+    expect(dialog.textContent).toContain('mesma missão')
+    expect(dialog.textContent).toContain('Seu progresso permanece registrado')
+    expect(dialog.textContent).toContain('não conclui nem desfaz nenhuma missão')
+    // The terminal stays until the user confirms.
+    expect(terminal.mounted.has(labId)).toBe(true)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(terminal.mounted.has(labId)).toBe(true)
+    expect(api.calls('POST', replacePath)).toBe(0)
+  })
+
+  it('replaces the lab and connects to the new one', async () => {
+    const created = lab({ id: newLabId })
+    let finish: (response: Response) => void = () => {}
+    api.routes[`POST ${replacePath}`] = () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve
+      })
+    opens(created)
+    const { client } = renderAt(path)
+    expect(await screen.findByTestId('terminal')).toBeTruthy()
+
+    await confirmReset()
+
+    expect(await screen.findByText('Reiniciando o laboratório…')).toBeTruthy()
+    // The old lab's terminal is closed as soon as the reset starts.
+    expect(terminal.mounted.has(labId)).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Reiniciar laboratório' })).toBeNull()
+    const [, init] = api.fetch.mock.calls.find(([input]) => input === replacePath) ?? []
+    expect(JSON.parse(String(init?.body))).toEqual({ mission_slug: 'sample-file' })
+
+    // The old lab ends while the request runs; the page keeps showing the reset.
+    oldLab(lab({ status: 'terminating', end_reason: 'reset', ended_at: 'x' }))
+    await act(() => client.invalidateQueries({ queryKey: ['labs', 'one', labId] }))
+    expect(screen.getByText('Reiniciando o laboratório…')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Iniciar novo laboratório' })).toBeNull()
+
+    currentLab(created)
+    const answered = Date.now()
+    finish(Response.json(created, { status: 201 }))
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(`${newLabId} open`)
+    expect([...terminal.mounted]).toEqual([newLabId])
+    expect(api.calls('POST', replacePath)).toBe(1)
+    // The old lab and the mission's detail are read again (or marked to be, when no
+    // page shows them any more).
+    for (const key of [
+      ['labs', 'one', labId],
+      ['catalog', 'mission', 'sample-file'],
+    ]) {
+      const state = client.getQueryState(key)
+      expect(state?.isInvalidated || (state?.dataUpdatedAt ?? 0) >= answered).toBe(true)
+    }
+  })
+
+  it('keeps the lab when the reset is refused before it ends', async () => {
+    failWith(429, 'rate_limited', 'Muitos laboratórios iniciados em pouco tempo.')
+    renderAt(path)
+
+    await confirmReset()
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Muitos laboratórios/)
+    expect((await screen.findByTestId('terminal')).textContent).toBe(`${labId} open`)
+    const again = await screen.findByRole('button', { name: 'Reiniciar laboratório' })
+    await waitFor(() => expect((again as HTMLButtonElement).disabled).toBe(false))
+    expect(api.calls('POST', replacePath)).toBe(1)
+  })
+
+  it('offers a new lab, never the same reset, when the new lab failed', async () => {
+    failWith(503, 'lab_start_failed', 'Não foi possível iniciar o novo laboratório.', () => {
+      oldLab(replaced)
+      currentLab(null)
+    })
+    const created = lab({ id: newLabId })
+    api.routes['POST /api/labs'] = () => Response.json(created, { status: 201 })
+    opens(created)
+    renderAt(path)
+
+    await confirmReset()
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Não foi possível iniciar o novo laboratório.',
+    )
+    expect(await screen.findByText('Você não tem um laboratório ativo.')).toBeTruthy()
+    expect(screen.getByText(/O laboratório foi reiniciado/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Tentar novamente' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar novo laboratório' }))
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(`${newLabId} open`)
+    expect(api.calls('POST', replacePath)).toBe(1)
+    expect(api.calls('POST', '/api/labs')).toBe(1)
+  })
+
+  it('shows a pending removal and lets the user ask again', async () => {
+    const ending = lab({ status: 'terminating', end_reason: 'reset', ended_at: 'x' })
+    const message = 'O laboratório anterior ainda está sendo removido.'
+    failWith(503, 'previous_lab_not_removed', message, () => {
+      oldLab(ending)
+      currentLab(ending)
+    })
+    renderAt(path)
+
+    await confirmReset()
+
+    expect(await screen.findByText('A remoção deste laboratório ainda não terminou.')).toBeTruthy()
+    const created = lab({ id: newLabId })
+    api.routes[`POST ${replacePath}`] = () => Response.json(created, { status: 201 })
+    opens(created)
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(`${newLabId} open`)
+    expect(api.calls('POST', replacePath)).toBe(2)
+  })
+
+  it('reads the state again after a lost answer and opens the lab that replaced it', async () => {
+    api.routes[`POST ${replacePath}`] = () => {
+      oldLab(replaced)
+      currentLab(lab({ id: newLabId }))
+      throw new TypeError('Failed to fetch')
+    }
+    renderAt(path)
+
+    await confirmReset()
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Não foi possível confirmar/)
+    const link = await screen.findByRole('link', { name: 'Abrir laboratório atual' })
+    expect(link.getAttribute('href')).toBe(`/labs/${newLabId}`)
+    expect(screen.getByText('Seu laboratório atual está pronto.')).toBeTruthy()
+    expect(api.calls('POST', replacePath)).toBe(1)
+  })
+
+  it('points to the new lab when it was reset elsewhere', async () => {
+    oldLab(replaced)
+    currentLab(lab({ id: newLabId, status: 'provisioning' }))
+    renderAt(path)
+
+    expect(await screen.findByText(/O laboratório foi reiniciado/)).toBeTruthy()
+    expect(await screen.findByText('Seu laboratório atual está sendo preparado.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Abrir laboratório atual' }).getAttribute('href')).toBe(
+      `/labs/${newLabId}`,
+    )
+    expect(screen.queryByRole('button', { name: 'Iniciar novo laboratório' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('explains a lab left for another mission', async () => {
+    oldLab(lab({ status: 'terminated', end_reason: 'mission_switch', ended_at: 'x' }))
+    currentLab(null)
+    renderAt(path)
+
+    expect(await screen.findByText(/Você trocou de missão/)).toBeTruthy()
+    expect(await screen.findByText('Você não tem um laboratório ativo.')).toBeTruthy()
+  })
+
+  it('offers no reset for a lab without a mission', async () => {
+    oldLab(lab({ mission: null }))
+    renderAt(path)
+
+    expect(await screen.findByTestId('terminal')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reiniciar laboratório' })).toBeNull()
   })
 })

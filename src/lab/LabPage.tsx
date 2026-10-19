@@ -6,9 +6,25 @@ import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { ConnectionStatus } from '../terminal/connection.ts'
 import { MAX_RECONNECT_ATTEMPTS, reconnectDelay } from '../terminal/reconnect.ts'
 import { Terminal } from '../terminal/Terminal.tsx'
-import { endReasonMessage, fetchLab, type Lab, type LabMission, statusLabel } from './api.ts'
+import {
+  endReasonMessage,
+  fetchLab,
+  type Lab,
+  type LabMission,
+  statusLabel,
+  wasReplaced,
+} from './api.ts'
+import { ConfirmReplace } from './ConfirmReplace.tsx'
 import styles from './LabPage.module.css'
-import { labKeys, useCreateLab, useEndLab, useLab } from './queries.ts'
+import {
+  labKeys,
+  type Replacement,
+  useCreateLab,
+  useCurrentLab,
+  useEndLab,
+  useLab,
+  useReplaceLab,
+} from './queries.ts'
 import { ValidationPanel } from './ValidationPanel.tsx'
 
 const stateLabel: Record<ConnectionStatus['state'], string> = {
@@ -26,13 +42,25 @@ export function LabPage() {
   if (auth.status === 'anonymous') return <Navigate to="/login" replace />
   if (auth.status === 'loading') return <Message text="Carregando…" />
   if (auth.status === 'error') return <Message text={auth.message} alert retry={auth.retry} />
-  return <LabView labId={labId} />
+  // One mount per lab: the page of the lab that replaces this one starts afresh, and
+  // leaving this one closes its terminal.
+  return <LabView key={labId} labId={labId} />
 }
 
 function LabView({ labId }: { labId: string }) {
   const lab = useLab(labId)
+  // Held here, above the lab's state: the lab ends while it is being replaced, and the
+  // page keeps following the request instead of showing the ended lab.
+  const replace = useReplaceLab()
+  const navigate = useNavigate()
   const recheckSession = useRecheckSession()
   const unauthorized = lab.error?.status === 401
+
+  function startReplacement(replacement: Replacement) {
+    replace.mutate(replacement, {
+      onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
+    })
+  }
 
   useEffect(() => {
     if (unauthorized) recheckSession()
@@ -45,11 +73,35 @@ function LabView({ labId }: { labId: string }) {
     if (lab.error.status === 404) return <Message text="Laboratório não encontrado." alert />
     return <Message text={lab.error.message} alert retry={() => void lab.refetch()} />
   }
-  if (lab.data.status === 'ready') return <ReadyLab lab={lab.data} />
-  if (lab.data.status === 'provisioning') {
-    return <Message text="Preparando o laboratório…" mission={lab.data.mission} />
+  if (replace.isPending && replace.variables) return <Replacing replacement={replace.variables} />
+  const failure = replace.error
+  const current = lab.data
+  if (current.status === 'ready') {
+    return (
+      <ReadyLab
+        lab={current}
+        onReplace={startReplacement}
+        replaceError={failure}
+        // After a failure the lab is read again before another reset can be asked for.
+        checking={failure !== null && lab.isFetching}
+      />
+    )
   }
-  return <EndedLab lab={lab.data} />
+  if (current.status === 'provisioning') {
+    return <Message text="Preparando o laboratório…" mission={current.mission} />
+  }
+  if (failure || wasReplaced(current.end_reason)) {
+    const missionSlug = replace.variables?.missionSlug ?? current.mission?.slug ?? null
+    return (
+      <AfterReplacement
+        lab={current}
+        error={failure}
+        missionSlug={missionSlug}
+        onRetry={() => missionSlug && startReplacement({ lab: current, missionSlug })}
+      />
+    )
+  }
+  return <EndedLab lab={current} />
 }
 
 // The mission version the lab was created for, as the API reports it.
@@ -65,10 +117,21 @@ function MissionLine({ mission }: { mission: LabMission | null }) {
 
 type Retry = { attempt: number; delay: number }
 
-function ReadyLab({ lab }: { lab: Lab }) {
+function ReadyLab({
+  lab,
+  onReplace,
+  replaceError,
+  checking,
+}: {
+  lab: Lab
+  onReplace: (replacement: Replacement) => void
+  replaceError: ApiError | null
+  checking: boolean
+}) {
   const client = useQueryClient()
   const recheckSession = useRecheckSession()
   const end = useEndLab()
+  const [confirming, setConfirming] = useState(false)
   const [status, setStatus] = useState<ConnectionStatus>({ state: 'connecting' })
   const [session, setSession] = useState(0)
   const [closeRequested, setCloseRequested] = useState(false)
@@ -179,6 +242,21 @@ function ReadyLab({ lab }: { lab: Lab }) {
         />
       </section>
       {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
+      {confirming && lab.mission && (
+        <ConfirmReplace
+          title="Reiniciar o laboratório?"
+          confirmLabel="Descartar e reiniciar"
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => {
+            setConfirming(false)
+            if (lab.mission) onReplace({ lab, missionSlug: lab.mission.slug })
+          }}
+        >
+          Os arquivos, os processos e todo o estado temporário deste laboratório serão
+          descartados. Um laboratório novo será criado para a mesma missão, na versão atual
+          dela.
+        </ConfirmReplace>
+      )}
       <footer className={styles.actions}>
         <span className={styles.expiry}>
           Encerra automaticamente às {formatTime(lab.expires_at)}.
@@ -186,6 +264,11 @@ function ReadyLab({ lab }: { lab: Lab }) {
         {end.error && (
           <span className={styles.error} role="alert">
             {end.error.message}
+          </span>
+        )}
+        {replaceError && (
+          <span className={styles.error} role="alert">
+            {checking ? 'Verificando o estado do laboratório…' : replaceError.message}
           </span>
         )}
         {closed && !retry ? (
@@ -203,12 +286,148 @@ function ReadyLab({ lab }: { lab: Lab }) {
             Desconectar
           </button>
         )}
+        {lab.mission && (
+          <button
+            type="button"
+            disabled={confirming || checking || end.isPending}
+            onClick={() => setConfirming(true)}
+          >
+            Reiniciar laboratório
+          </button>
+        )}
         <button type="button" disabled={end.isPending} onClick={() => end.mutate(lab.id)}>
           {end.isPending ? 'Encerrando…' : 'Encerrar laboratório'}
         </button>
       </footer>
     </main>
   )
+}
+
+// While a reset or a mission switch runs. The terminal is gone: the lab is being
+// discarded.
+function Replacing({ replacement }: { replacement: Replacement }) {
+  const reset = replacement.lab.mission?.slug === replacement.missionSlug
+  return (
+    <main className={styles.ended}>
+      <h1 className={styles.title}>
+        <Link to="/">Linux Lab</Link>
+      </h1>
+      <MissionLine mission={replacement.lab.mission} />
+      <p role="status">{reset ? 'Reiniciando o laboratório…' : 'Trocando de missão…'}</p>
+      <p className={styles.muted}>
+        O laboratório anterior está sendo encerrado e um novo está sendo preparado. Isso pode
+        levar até dois minutos.
+      </p>
+    </main>
+  )
+}
+
+// Failures that leave the outcome of the request unknown: the connection was lost, or
+// something between the client and the API failed, possibly after the lab ended.
+const KNOWN_FAILURES = new Set([
+  'lab_capacity_reached',
+  'previous_lab_not_removed',
+  'lab_start_failed',
+])
+
+function replacementFailure(error: ApiError): string {
+  if (error.status === 0 || (error.status >= 500 && !KNOWN_FAILURES.has(error.code))) {
+    return 'Não foi possível confirmar o resultado. O estado abaixo foi consultado de novo.'
+  }
+  return error.message
+}
+
+// The lab is no longer ready after a replacement: one made elsewhere (another tab), or
+// one that failed here. What to offer comes from the user's current lab, read again from
+// the API: open it, retry while this lab's removal is pending, or start a new lab.
+// Replacing this lab again never creates a second new lab, so once its new lab failed a
+// retry would only be refused; a new lab is started with POST /api/labs instead, and
+// only once the API reports no active lab.
+function AfterReplacement({
+  lab,
+  error,
+  missionSlug,
+  onRetry,
+}: {
+  lab: Lab
+  error: ApiError | null
+  missionSlug: string | null
+  onRetry: () => void
+}) {
+  const current = useCurrentLab()
+  const create = useCreateLab()
+  const navigate = useNavigate()
+  const active = current.data
+  const reason = lab.end_reason ? endReasonMessage[lab.end_reason] : null
+
+  return (
+    <main className={styles.ended}>
+      <h1 className={styles.title}>
+        <Link to="/">Linux Lab</Link>
+      </h1>
+      <MissionLine mission={lab.mission} />
+      <p role="status">
+        Laboratório: <strong data-lab-status={lab.status}>{statusLabel[lab.status]}</strong>
+      </p>
+      {reason && <p>{reason}</p>}
+      {error && (
+        <p className={styles.error} role="alert">
+          {replacementFailure(error)}
+        </p>
+      )}
+      {current.isPending ? (
+        <p className={styles.muted}>Verificando o seu laboratório atual…</p>
+      ) : current.isError ? (
+        <p className={styles.error} role="alert">
+          {current.error.message}
+        </p>
+      ) : active && active.id !== lab.id ? (
+        <>
+          <p>{activeLabel[active.status] ?? 'Você tem um laboratório ativo.'}</p>
+          <Link to={`/labs/${active.id}`}>Abrir laboratório atual</Link>
+        </>
+      ) : active ? (
+        <>
+          <p>A remoção deste laboratório ainda não terminou.</p>
+          {error && missionSlug && (
+            <button className={styles.primary} type="button" onClick={onRetry}>
+              Tentar novamente
+            </button>
+          )}
+        </>
+      ) : (
+        missionSlug && (
+          <>
+            <p>Você não tem um laboratório ativo.</p>
+            <button
+              className={styles.primary}
+              type="button"
+              disabled={create.isPending}
+              onClick={() =>
+                create.mutate(missionSlug, {
+                  onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
+                })
+              }
+            >
+              {create.isPending ? 'Preparando…' : 'Iniciar novo laboratório'}
+            </button>
+          </>
+        )
+      )}
+      {create.error && (
+        <p className={styles.error} role="alert">
+          {create.error.message}
+        </p>
+      )}
+      <Link to="/">Voltar ao início</Link>
+    </main>
+  )
+}
+
+const activeLabel: Partial<Record<Lab['status'], string>> = {
+  ready: 'Seu laboratório atual está pronto.',
+  provisioning: 'Seu laboratório atual está sendo preparado.',
+  terminating: 'Seu laboratório atual está sendo encerrado.',
 }
 
 // A new lab is for the same mission, at its current version. Once this lab is no
