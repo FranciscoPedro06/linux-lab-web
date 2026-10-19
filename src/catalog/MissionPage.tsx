@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { Lab } from '../lab/api.ts'
-import { useCreateLab, useCurrentLab } from '../lab/queries.ts'
+import { ConfirmReplace } from '../lab/ConfirmReplace.tsx'
+import { useCreateLab, useCurrentLab, useReplaceLab } from '../lab/queries.ts'
 import { difficultyLabel, type MissionDetail, minutesLabel } from './api.ts'
 import { Completion } from './Completion.tsx'
 import { InlineMarkdown, Markdown } from './Markdown.tsx'
@@ -104,13 +105,25 @@ function Mission({ mission }: { mission: MissionDetail }) {
 }
 
 // The user's lab as it relates to this mission: start one, open the one being used for
-// this mission, or explain why another mission's lab blocks it. The API decides; a
-// refused start shows its message.
+// this mission, or switch to this mission from another mission's lab. The API decides;
+// a refused start or switch shows its message, and the current lab, read again, shows
+// what is possible next.
 function MissionLab({ slug }: { slug: string }) {
   const current = useCurrentLab()
   const create = useCreateLab()
+  const replace = useReplaceLab()
   const navigate = useNavigate()
   const lab = current.data
+
+  function switchHere(from: Lab) {
+    replace.mutate(
+      { lab: from, missionSlug: slug },
+      { onSuccess: (created) => navigate(`/labs/${created.id}`) },
+    )
+  }
+  // A removal that did not finish can be asked for again; it resumes the switch.
+  const pendingRemoval =
+    replace.error?.code === 'previous_lab_not_removed' ? replace.variables?.lab.id : undefined
 
   return (
     <section className={styles.lab} aria-labelledby="lab-heading">
@@ -124,6 +137,16 @@ function MissionLab({ slug }: { slug: string }) {
           </button>
           <p className={styles.muted} role="status">
             O ambiente da missão está sendo preparado. Isso pode levar até um minuto.
+          </p>
+        </>
+      ) : replace.isPending ? (
+        <>
+          <button className={styles.button} type="button" disabled>
+            Trocando de missão…
+          </button>
+          <p className={styles.muted} role="status">
+            O laboratório anterior está sendo encerrado e o desta missão está sendo preparado.
+            Isso pode levar até dois minutos.
           </p>
         </>
       ) : (
@@ -149,10 +172,22 @@ function MissionLab({ slug }: { slug: string }) {
               Iniciar laboratório
             </button>
           )}
-          {lab && <ActiveLab lab={lab} slug={slug} />}
+          {lab && (
+            <ActiveLab
+              lab={lab}
+              slug={slug}
+              onSwitch={() => switchHere(lab)}
+              onRetry={lab.id === pendingRemoval ? () => switchHere(lab) : undefined}
+            />
+          )}
           {create.error && (
             <p className={styles.error} role="alert">
               {create.error.message}
+            </p>
+          )}
+          {replace.error && (
+            <p className={styles.error} role="alert">
+              {replace.error.message}
             </p>
           )}
         </>
@@ -161,12 +196,30 @@ function MissionLab({ slug }: { slug: string }) {
   )
 }
 
-function ActiveLab({ lab, slug }: { lab: Lab; slug: string }) {
+function ActiveLab({
+  lab,
+  slug,
+  onSwitch,
+  onRetry,
+}: {
+  lab: Lab
+  slug: string
+  onSwitch: () => void
+  onRetry?: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
   if (lab.status === 'terminating') {
     return (
-      <p className={styles.muted} role="status">
-        O laboratório anterior está sendo encerrado. Aguarde para iniciar outro.
-      </p>
+      <>
+        <p className={styles.muted} role="status">
+          O laboratório anterior está sendo encerrado. Aguarde para iniciar outro.
+        </p>
+        {onRetry && (
+          <button className={styles.button} type="button" onClick={onRetry}>
+            Tentar novamente
+          </button>
+        )}
+      </>
     )
   }
   if (lab.mission?.slug === slug) {
@@ -185,10 +238,29 @@ function ActiveLab({ lab, slug }: { lab: Lab; slug: string }) {
   return (
     <>
       <p className={styles.muted} role="status">
-        Você já tem um laboratório ativo{other}. A troca de missão ainda não está disponível:
-        encerre esse laboratório para iniciar este.
+        Você já tem um laboratório ativo{other}.
+        {lab.status === 'provisioning' && ' Ele ainda está sendo preparado.'}
       </p>
       <Link to={`/labs/${lab.id}`}>Abrir laboratório atual</Link>
+      {lab.status === 'ready' &&
+        (confirming ? (
+          <ConfirmReplace
+            title="Trocar de missão?"
+            confirmLabel="Descartar e trocar"
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => {
+              setConfirming(false)
+              onSwitch()
+            }}
+          >
+            O laboratório{other} será encerrado: os arquivos, os processos e todo o estado
+            temporário dele serão descartados. Um laboratório novo será criado para esta missão.
+          </ConfirmReplace>
+        ) : (
+          <button className={styles.button} type="button" onClick={() => setConfirming(true)}>
+            Trocar para esta missão
+          </button>
+        ))}
     </>
   )
 }

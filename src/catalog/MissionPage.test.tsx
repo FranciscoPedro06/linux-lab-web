@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ana,
@@ -121,7 +121,11 @@ describe('starting a lab from the mission', () => {
     expect(within(section).getByRole('alert').textContent).toBe(
       'Você já tem um laboratório ativo de outra missão.',
     )
-    expect(within(section).queryByRole('button')).toBeNull()
+    // Switching is offered, never done without asking.
+    expect(within(section).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Trocar para esta missão',
+    ])
+    expect(api.calls('POST', `/api/labs/${labId}/replace`)).toBe(0)
   })
 
   it('offers the lab the user already has for this mission', async () => {
@@ -147,18 +151,34 @@ describe('starting a lab from the mission', () => {
     expect(within(section).queryByRole('button')).toBeNull()
   })
 
-  it('explains that the lab of another mission must end first, without replacing it', async () => {
+  it('offers to switch from the lab of another mission, without replacing it yet', async () => {
     mission()
     current(lab({ mission: { slug: 'sample-answer', title: 'Resposta de teste', version: 3 } }))
     renderAt(path)
 
     const section = await labSection()
-    const notice = await within(section).findByText(/A troca de missão ainda não está disponível/)
+    const notice = await within(section).findByText(/Você já tem um laboratório ativo/)
     expect(notice.textContent).toContain('“Resposta de teste”')
     const link = within(section).getByRole('link', { name: 'Abrir laboratório atual' })
     expect(link.getAttribute('href')).toBe(`/labs/${labId}`)
-    expect(within(section).queryByRole('button')).toBeNull()
+    expect(within(section).getByRole('button', { name: 'Trocar para esta missão' })).toBeTruthy()
     expect(api.calls('POST', '/api/labs')).toBe(0)
+    expect(api.calls('POST', `/api/labs/${labId}/replace`)).toBe(0)
+  })
+
+  it('offers no switch while the other mission’s lab is being prepared', async () => {
+    mission()
+    current(
+      lab({
+        status: 'provisioning',
+        mission: { slug: 'sample-answer', title: 'Resposta de teste', version: 3 },
+      }),
+    )
+    renderAt(path)
+
+    const section = await labSection()
+    expect(await within(section).findByText(/ainda está sendo preparado/)).toBeTruthy()
+    expect(within(section).queryByRole('button')).toBeNull()
   })
 
   it('waits while the previous lab is being ended', async () => {
@@ -359,5 +379,199 @@ describe('progress on the mission page', () => {
     const text = (await header()).textContent
     expect(text).toContain('Concluída')
     expect(text).not.toContain('na versão')
+  })
+})
+
+describe('switching missions', () => {
+  const otherMission = { slug: 'sample-answer', title: 'Resposta de teste', version: 3 }
+  const newLabId = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
+  const replacePath = `/api/labs/${labId}/replace`
+
+  function otherLab(overrides: Parameters<typeof lab>[0] = {}) {
+    return lab({ mission: otherMission, ...overrides })
+  }
+
+  function opens(created: ReturnType<typeof lab>) {
+    api.routes[`GET /api/labs/${created.id}`] = () => Response.json(created)
+  }
+
+  async function confirmSwitch() {
+    const section = await labSection()
+    fireEvent.click(await within(section).findByRole('button', { name: 'Trocar para esta missão' }))
+    const dialog = within(section).getByRole('alertdialog', { name: 'Trocar de missão?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Descartar e trocar' }))
+    return section
+  }
+
+  beforeEach(() => {
+    mission()
+    current(otherLab())
+  })
+
+  it('asks first, explaining what is discarded and that progress is kept', async () => {
+    renderAt(path)
+    const section = await labSection()
+
+    fireEvent.click(await within(section).findByRole('button', { name: 'Trocar para esta missão' }))
+
+    const dialog = within(section).getByRole('alertdialog', { name: 'Trocar de missão?' })
+    expect(dialog.textContent).toContain('“Resposta de teste” será encerrado')
+    expect(dialog.textContent).toContain('os arquivos, os processos e todo o estado temporário')
+    expect(dialog.textContent).toContain('Seu progresso permanece registrado')
+    expect(api.calls('POST', replacePath)).toBe(0)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+
+    expect(within(section).queryByRole('alertdialog')).toBeNull()
+    expect(within(section).getByRole('button', { name: 'Trocar para esta missão' })).toBeTruthy()
+    expect(api.calls('POST', replacePath)).toBe(0)
+  })
+
+  it('replaces the other lab with one for this mission and opens it', async () => {
+    const created = lab({ id: newLabId })
+    api.routes[`POST ${replacePath}`] = () => {
+      current(created)
+      return Response.json(created, { status: 201 })
+    }
+    opens(created)
+    const { client } = renderAt(path)
+
+    await confirmSwitch()
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(newLabId)
+    const [, init] = api.fetch.mock.calls.find(([input]) => input === replacePath) ?? []
+    expect(JSON.parse(String(init?.body))).toEqual({ mission_slug: 'sample-file' })
+    expect(api.calls('POST', replacePath)).toBe(1)
+    // The new lab is the current one; the replaced lab is no longer offered.
+    expect(client.getQueryData(['labs', 'current'])).toEqual(created)
+  })
+
+  it('sends one request however often it is clicked, and shows it running', async () => {
+    api.routes[`POST ${replacePath}`] = () => new Promise<Response>(() => {})
+    renderAt(path)
+
+    const section = await confirmSwitch()
+
+    const running = await within(section).findByRole('button', { name: 'Trocando de missão…' })
+    expect((running as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(running)
+    expect(within(section).queryByRole('button', { name: 'Trocar para esta missão' })).toBeNull()
+    expect(api.calls('POST', replacePath)).toBe(1)
+  })
+
+  it('keeps the other lab when the switch is refused before it ends', async () => {
+    api.routes[`POST ${replacePath}`] = apiError(
+      503,
+      'lab_capacity_reached',
+      'Todos os laboratórios estão em uso. Tente novamente em alguns minutos.',
+    )
+    renderAt(path)
+    await labSection()
+    const before = api.calls('GET', '/api/labs/current')
+
+    const section = await confirmSwitch()
+
+    expect((await within(section).findByRole('alert')).textContent).toMatch(/em uso/)
+    const offered = await within(section).findByRole('button', { name: 'Trocar para esta missão' })
+    expect(offered).toBeTruthy()
+    await waitFor(() => expect(api.calls('GET', '/api/labs/current')).toBeGreaterThan(before))
+    expect(api.calls('POST', replacePath)).toBe(1)
+  })
+
+  it('offers a new lab, not the same switch again, when the new lab failed', async () => {
+    api.routes[`POST ${replacePath}`] = () => {
+      current(null)
+      return Response.json(
+        {
+          error: {
+            code: 'lab_start_failed',
+            message: 'Não foi possível iniciar o novo laboratório. O anterior já foi encerrado.',
+          },
+        },
+        { status: 503 },
+      )
+    }
+    const created = lab({ id: newLabId })
+    api.routes['POST /api/labs'] = () => Response.json(created, { status: 201 })
+    opens(created)
+    renderAt(path)
+
+    const section = await confirmSwitch()
+
+    expect((await within(section).findByRole('alert')).textContent).toMatch(/novo laboratório/)
+    fireEvent.click(await within(section).findByRole('button', { name: 'Iniciar laboratório' }))
+    expect((await screen.findByTestId('terminal')).textContent).toBe(newLabId)
+    expect(api.calls('POST', replacePath)).toBe(1)
+    expect(api.calls('POST', '/api/labs')).toBe(1)
+  })
+
+  it('retries when the other lab could not be removed yet', async () => {
+    api.routes[`POST ${replacePath}`] = () => {
+      current(otherLab({ status: 'terminating', end_reason: 'mission_switch', ended_at: 'x' }))
+      return Response.json(
+        {
+          error: {
+            code: 'previous_lab_not_removed',
+            message: 'O laboratório anterior foi encerrado, mas ainda está sendo removido.',
+          },
+        },
+        { status: 503 },
+      )
+    }
+    renderAt(path)
+
+    const section = await confirmSwitch()
+
+    expect((await within(section).findByRole('alert')).textContent).toMatch(/sendo removido/)
+    const created = lab({ id: newLabId })
+    api.routes[`POST ${replacePath}`] = () => Response.json(created, { status: 201 })
+    opens(created)
+    fireEvent.click(await within(section).findByRole('button', { name: 'Tentar novamente' }))
+
+    expect((await screen.findByTestId('terminal')).textContent).toBe(newLabId)
+    expect(api.calls('POST', replacePath)).toBe(2)
+  })
+
+  it('reads the state again after a lost answer instead of sending the switch again', async () => {
+    api.routes[`POST ${replacePath}`] = () => {
+      current(lab({ id: newLabId }))
+      throw new TypeError('Failed to fetch')
+    }
+    renderAt(path)
+
+    const section = await confirmSwitch()
+
+    expect((await within(section).findByRole('alert')).textContent).toMatch(/contatar o servidor/)
+    // The switch did happen: the current lab is now this mission's.
+    const ready = await within(section).findByText('Seu laboratório desta missão está pronto.')
+    expect(ready).toBeTruthy()
+    const link = within(section).getByRole('link', { name: 'Abrir laboratório' })
+    expect(link.getAttribute('href')).toBe(`/labs/${newLabId}`)
+    expect(api.calls('POST', replacePath)).toBe(1)
+  })
+
+  it('keeps the mission’s progress after a switch', async () => {
+    mission({ progress: completed(1) })
+    const created = lab({ id: newLabId })
+    api.routes[`POST ${replacePath}`] = () => Response.json(created, { status: 201 })
+    opens(created)
+    const { client } = renderAt(path)
+    expect(await screen.findByText(/Concluída/)).toBeTruthy()
+    const reads = api.calls('GET', '/api/missions/sample-file')
+
+    await confirmSwitch()
+    await screen.findByTestId('terminal')
+
+    // Read again from the API, which still reports the completion; nothing on the
+    // client removed it.
+    await waitFor(() =>
+      expect(api.calls('GET', '/api/missions/sample-file')).toBeGreaterThan(reads),
+    )
+    await waitFor(() =>
+      expect(
+        client.getQueryData<{ progress: { status: string } }>(['catalog', 'mission', 'sample-file'])
+          ?.progress.status,
+      ).toBe('completed'),
+    )
   })
 })
