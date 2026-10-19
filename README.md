@@ -18,7 +18,7 @@ Learning Linux by typing whatever command each lesson names trains syntax recall
 
 Frontend and API are served from the same origin. The session is an `HttpOnly` cookie set by the API; the frontend never sees the token and stores nothing about the session in `localStorage` or `sessionStorage`.
 
-A user has one active lab. While it exists, the page of another mission says that switching missions is not available yet and links to the current lab; it never replaces it.
+A user has one active lab. While it exists, the page of another mission links to it and offers to switch to this mission; the lab page offers to reset the lab. Both replace the lab with a new one only after the user confirms that its files, processes and temporary state will be discarded, and both keep the user's progress.
 
 On the lab page, the student asks the API to verify the lab and sees, condition by condition, whether the lab meets the mission. The first validation that passes records the completion of the mission, which the panel announces; a later one says the mission was already completed, and a failing one that the earlier completion is kept. An operational error is shown as a failure of the check, not of the student.
 
@@ -36,7 +36,7 @@ The session cookie is shared by every tab, so tabs are coordinated with the Web 
 - A tab that becomes hidden hides its pages and releases the lock; when it is shown again it takes the lock and asks the API first.
 - Supported browsers are those with Web Locks and `BroadcastChannel` (Chrome 69+, Edge 79+, Firefox 96+, Safari 15.4+). Elsewhere signing in and signing up are refused, so no other user can be signed in there; logging out still works.
 
-Planned, not implemented yet: lab reset, switching a lab to another mission, and the explanation and solutions after completion (a candidate for increment 14).
+Planned, not implemented yet: the explanation and solutions after completion (a candidate for increment 14).
 
 The interface text is in Portuguese.
 
@@ -47,9 +47,9 @@ The interface text is in Portuguese.
 | `/login` | Email and password | Implemented |
 | `/signup` | Name, email, password and invite code (required during the closed beta) | Implemented |
 | `/` | Signed out: links to login and sign-up. Signed in: the current lab and its mission (preparing, ready with a link to its terminal and an end button, ending), the published modules and their missions, previous labs with their mission and end reason, and logout. Completed missions are marked | Implemented |
-| `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal and the validation panel, or ended with the reason and a button to start a new lab for the same mission. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
-| `/missions/:slug` | Module, title, summary, difficulty, estimated time and tags; the problem (Markdown), objectives and hints; the user's lab for it: a button to start one, a link to the one already open for this mission, or, when the active lab is for another mission, a notice and a link to it; whether the user completed the mission, and on which version if not the current one. Requires a session; an unknown or unpublished mission shows "not found" | Implemented |
-| `/missions/:slug` with a lab | Reset (increment 10), and the explanation and solutions after completion (candidate for increment 14); the terminal and validation stay on `/labs/:id` | Planned |
+| `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal, the validation panel and a reset, or ended with the reason and a button to start a new lab for the same mission. A lab that was reset or switched points to the user's current lab instead. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
+| `/missions/:slug` | Module, title, summary, difficulty, estimated time and tags; the problem (Markdown), objectives and hints; the user's lab for it: a button to start one, a link to the one already open for this mission, or, when the active lab is for another mission, a link to it and a switch to this mission; whether the user completed the mission, and on which version if not the current one. Requires a session; an unknown or unpublished mission shows "not found" | Implemented |
+| `/missions/:slug` with a lab | The explanation and solutions after completion (candidate for increment 14); the terminal and validation stay on `/labs/:id` | Planned |
 
 Unknown paths redirect to `/`. A signed-in user who opens `/login` or `/signup` is sent to `/`; a signed-out visitor who opens `/labs/:id` or `/missions/:slug` is sent to `/login`. The old development entry `/?lab=<id>` no longer opens anything.
 
@@ -66,6 +66,21 @@ The session cookie is `Secure`. During development, browsers that treat `http://
 `src/lab/api.ts` calls the lab endpoints; `src/lab/queries.ts` keeps them in TanStack Query. The API owns the lifecycle: the client never decides a lab's state, it shows what `GET /api/labs/current` and `GET /api/labs/{id}` report. It polls every second while a lab is `provisioning` or `terminating`, and every 15 seconds while it is `ready`, since the server can end it (timeouts, OOM) at any time. Logout removes every cached lab.
 
 A lab is created with `POST /api/labs` and `{ "mission_slug": ... }`, from the mission's page or, for the same mission, from an ended lab's page. The client sends nothing else; the API picks the mission version, parameters, setup and limits. The request is synchronous and returns once the lab is ready or has failed. The API's error messages (`active_lab_for_different_mission`, `lab_start_failed`, `mission_not_found` and others) are shown as they are, and a refused start refreshes the current lab so the page shows what blocks it.
+
+### Reset and mission switch
+
+Both call `POST /api/labs/{id}/replace` with `{ "mission_slug": ... }`: the lab's own mission for a reset (lab page, "Reiniciar laboratório"), another mission for a switch (that mission's page, "Trocar para esta missão", offered only while the current lab is ready). The API ends the lab, removes its container and creates a new lab, with a new id, container and parameters; the request returns once the new lab is ready or has failed, which can take up to about two minutes.
+
+- Nothing is sent before the user confirms, in a dialog that says the lab's files, processes and temporary state are discarded and that progress is kept: a reset neither completes nor undoes a mission. The safe choice, "Cancelar", has the focus.
+- While the request runs, the page shows "Reiniciando o laboratório…" or "Trocando de missão…" and no button that could send it again. The old lab's terminal is closed as soon as the reset starts; on the lab page the request is held above the lab's state, so the old lab ending meanwhile does not replace that screen.
+- On success the page opens the new lab (`/labs/:id`, one page mount per lab, so its terminal connects to the new lab only). The old lab, the current lab, the list and the details of both missions are read again; progress is not changed by the client.
+- The client never retries a replacement by itself. After any failure it reads the old lab and the current lab again, and offers what the API state allows:
+  - the old lab still ready (the request was refused before it ended: `mission_not_found`, `rate_limited`, `lab_capacity_reached`): the API's message, and the lab as it was;
+  - another lab active (the replacement happened elsewhere, or the answer was lost): a link to it;
+  - the old lab still being removed (`previous_lab_not_removed`): "A remoção deste laboratório ainda não terminou." and "Tentar novamente", which asks for the same replacement and resumes it;
+  - no active lab (`lab_start_failed`, or a replacement interrupted after the old lab ended): "Iniciar novo laboratório", which is `POST /api/labs`. Asking for the same replacement again would never create a second new lab, only be refused.
+- A lost answer (`network_error`) or a `500` is reported as "Não foi possível confirmar o resultado", and the state read again decides what is offered; nothing destructive is sent before it.
+- An ended lab with `end_reason` `reset` or `mission_switch` explains it and points to the current lab, if any.
 
 ## Validation
 
@@ -147,7 +162,7 @@ CI runs the same commands.
 
 ## Status
 
-Increments 01 and 03 to 09 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, the validation panel on the lab page, and the user's progress in the catalog, the mission page and the panel. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
+Increments 01 and 03 to 10 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, the validation panel on the lab page, the user's progress in the catalog, the mission page and the panel, and lab reset and mission switching. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
 
 ## License
 
