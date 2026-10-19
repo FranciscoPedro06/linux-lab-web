@@ -15,6 +15,8 @@ export type EndReason =
   | 'container_lost'
   | 'provisioning_failed'
   | 'provisioning_timeout'
+  | 'reset'
+  | 'mission_switch'
 
 // The mission version a lab was created for. It does not change while the lab exists.
 export type LabMission = {
@@ -67,6 +69,20 @@ export function createLab(missionSlug: string, fetchImpl?: FetchLike): Promise<L
   )
 }
 
+// Replaces the lab with a new one: for the same mission (a reset) or another one (a
+// mission switch). The API ends the lab, removes it and answers once the new lab is
+// ready, which can take up to about two minutes. Asking again for the same replacement
+// returns the same new lab; it never creates a second one.
+export function replaceLab(id: string, missionSlug: string, fetchImpl?: FetchLike): Promise<Lab> {
+  return expectLab(
+    apiRequest<Lab>(
+      `/api/labs/${encodeURIComponent(id)}/replace`,
+      { method: 'POST', body: { mission_slug: missionSlug } },
+      fetchImpl,
+    ),
+  )
+}
+
 export function endLab(id: string, fetchImpl?: FetchLike): Promise<Lab> {
   return expectLab(
     apiRequest<Lab>(`/api/labs/${encodeURIComponent(id)}`, { method: 'DELETE' }, fetchImpl),
@@ -100,6 +116,15 @@ export const endReasonMessage: Record<EndReason, string> = {
   container_lost: 'O laboratório parou inesperadamente.',
   provisioning_failed: 'Não foi possível iniciar o laboratório.',
   provisioning_timeout: 'O laboratório demorou demais para iniciar.',
+  reset:
+    'O laboratório foi reiniciado: este ambiente foi descartado e um novo foi criado para a mesma missão. O progresso da missão foi mantido.',
+  mission_switch:
+    'Você trocou de missão: este ambiente foi descartado. O progresso das missões foi mantido.',
+}
+
+// End reasons of a lab replaced by a new one.
+export function wasReplaced(reason: EndReason | null): boolean {
+  return reason === 'reset' || reason === 'mission_switch'
 }
 
 // Validation (POST /api/labs/{id}/validate). The API checks the lab's state against

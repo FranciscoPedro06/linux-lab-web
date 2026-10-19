@@ -11,6 +11,7 @@ import {
   fetchLabs,
   isTransient,
   type Lab,
+  replaceLab,
   validateLab,
   type ValidationRun,
 } from './api.ts'
@@ -82,6 +83,40 @@ export function useCreateLab() {
 export function useEndLab() {
   const store = useStoreLab()
   return useUserMutation<Lab, string>({ mutationFn: (id) => endLab(id), onSuccess: store })
+}
+
+// A reset (the lab's own mission) or a mission switch (another one).
+export type Replacement = {
+  lab: Lab
+  missionSlug: string
+}
+
+// Replacing a lab ends it and creates a new one, so it is never retried by the client:
+// the page reads the state again and lets the user decide. Whatever the outcome, the
+// old lab, the current lab, the list and the details of both missions are read again:
+// the old lab may have ended even when the request failed, and a mission's detail is
+// shown at the version of the user's active lab for it.
+export function useReplaceLab() {
+  const client = useQueryClient()
+  return useUserMutation<Lab, Replacement>({
+    mutationFn: ({ lab, missionSlug }) => replaceLab(lab.id, missionSlug),
+    retry: false,
+    onSuccess: (created, replacement) => {
+      client.setQueryData(labKeys.one(created.id), created)
+      client.setQueryData(labKeys.current, created)
+      refreshAfterReplacement(client, replacement)
+    },
+    onError: (_error, replacement) => refreshAfterReplacement(client, replacement),
+  })
+}
+
+function refreshAfterReplacement(client: QueryClient, { lab, missionSlug }: Replacement) {
+  void client.invalidateQueries({ queryKey: labKeys.one(lab.id) })
+  void client.invalidateQueries({ queryKey: labKeys.current })
+  void client.invalidateQueries({ queryKey: labKeys.list })
+  for (const slug of new Set([lab.mission?.slug, missionSlug])) {
+    if (slug) void client.invalidateQueries({ queryKey: catalogKeys.mission(slug) })
+  }
 }
 
 // Whether a failed validation request may still have been stored: the connection was
