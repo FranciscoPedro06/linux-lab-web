@@ -82,6 +82,8 @@ beforeEach(() => {
     'GET /api/labs/current': () => Response.json(null),
     'GET /api/labs': () => Response.json([]),
     [`GET /api/labs/${labId}`]: () => Response.json(lab()),
+    [`GET /api/labs/${labId}/history?after=0&limit=500`]: () =>
+      Response.json({ entries: [], more: false }),
     'GET /api/missions/sample-file': () => Response.json(missionDetail()),
   }
   vi.stubGlobal('fetch', api.fetch)
@@ -229,5 +231,42 @@ describe('the session check on this tab', () => {
     await settled(client)
 
     expect(screen.getByText('Olá, Bia.')).toBeTruthy()
+  })
+})
+
+describe('command history across users', () => {
+  it("does not keep Ana's late history for Bia", async () => {
+    const history = pending()
+    api.routes[`GET /api/labs/${labId}/history?after=0&limit=500`] = history.route
+    const { client } = renderAt(`/labs/${labId}`)
+    await vi.waitFor(() =>
+      expect(api.calls('GET', `/api/labs/${labId}/history?after=0&limit=500`)).toBe(1),
+    )
+
+    await expire(client)
+    await screen.findByRole('heading', { name: 'Entrar' })
+    await biaSignsIn(lab({ id: biaLabId }))
+    api.routes[`GET /api/labs/${biaLabId}`] = () => Response.json(lab({ id: biaLabId }))
+    api.routes[`GET /api/labs/${biaLabId}/history?after=0&limit=500`] = () =>
+      Response.json({
+        entries: [{ seq: 1, command: 'echo bia', recorded_at: '2026-10-25T12:00:00Z' }],
+        more: false,
+      })
+
+    history.release(
+      Response.json({
+        entries: [{ seq: 1, command: 'echo ana-secret', recorded_at: '2026-10-25T12:00:00Z' }],
+        more: false,
+      }),
+    )
+    await settled(client)
+    const cached = () =>
+      JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))
+    expect(cached()).not.toContain('ana-secret')
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Abrir terminal' }))
+    expect(await screen.findByText('echo bia')).toBeTruthy()
+    expect(screen.queryByText('echo ana-secret')).toBeNull()
+    expect(cached()).not.toContain('ana-secret')
   })
 })

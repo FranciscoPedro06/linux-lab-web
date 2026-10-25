@@ -88,11 +88,7 @@ export function HistoryPanel({
       </button>
     )
   } else if (history.isPending) {
-    body = (
-      <p className={styles.muted} role="status">
-        Carregando o histórico…
-      </p>
-    )
+    body = <p className={styles.muted}>Carregando o histórico…</p>
   } else if (history.isError && history.data === undefined) {
     body = (
       <>
@@ -154,7 +150,7 @@ export function HistoryPanel({
       </h2>
       {!live && <HistoryNotice />}
       {body}
-      <p className={styles.muted} role="status" aria-live="polite">
+      <p className={styles.muted} aria-live="polite">
         {feedback}
       </p>
       {history.isError && history.data !== undefined && (
@@ -166,7 +162,7 @@ export function HistoryPanel({
         </p>
       )}
       {entries.length >= MAX_HISTORY_ENTRIES && (
-        <p className={styles.muted} role="status">
+        <p className={styles.muted}>
           Este laboratório atingiu o limite de {MAX_HISTORY_ENTRIES} comandos no histórico; os
           próximos não serão registrados.
         </p>

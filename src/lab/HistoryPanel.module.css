@@ -1,5 +1,6 @@
 .panel {
   display: flex;
+  align-self: stretch;
   flex-direction: column;
   gap: 0.5rem;
   min-height: 0;
@@ -42,6 +43,7 @@
   flex-direction: column;
   gap: 0.5rem;
   min-height: 0;
+  max-height: 60vh;
   margin: 0;
   padding: 0;
   overflow-y: auto;

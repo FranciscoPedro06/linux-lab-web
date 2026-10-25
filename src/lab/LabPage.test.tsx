@@ -11,6 +11,9 @@ const terminal = vi.hoisted(() => ({
   sessions: [] as number[],
   onStatus: null as ((status: ConnectionStatus) => void) | null,
   mounted: new Set<string>(),
+  // Text the history panel inserted, and what the stand-in answers.
+  inserted: [] as string[],
+  insertResult: 'inserted' as 'inserted' | 'not_connected' | 'needs_bracketed_paste',
 }))
 
 vi.mock('../terminal/Terminal.tsx', async () => {
@@ -21,8 +24,15 @@ vi.mock('../terminal/Terminal.tsx', async () => {
       session: number
       closeRequested: boolean
       onStatus: (status: ConnectionStatus) => void
+      insertRef?: { current: ((text: string) => string) | null }
     }) => {
       terminal.onStatus = props.onStatus
+      if (props.insertRef) {
+        props.insertRef.current = (text: string) => {
+          terminal.inserted.push(text)
+          return terminal.insertResult
+        }
+      }
       if (terminal.sessions.at(-1) !== props.session) terminal.sessions.push(props.session)
       useEffect(() => {
         terminal.mounted.add(props.labId)
@@ -53,9 +63,13 @@ beforeEach(() => {
   terminal.sessions = []
   terminal.onStatus = null
   terminal.mounted.clear()
+  terminal.inserted = []
+  terminal.insertResult = 'inserted'
   api.routes = {
     'GET /api/auth/me': () => Response.json(ana),
     [`GET /api/labs/${labId}`]: () => Response.json(lab()),
+    [`GET /api/labs/${labId}/history?after=0&limit=500`]: () =>
+      Response.json({ entries: [], more: false }),
     'GET /api/missions/sample-file': () => Response.json(missionDetail()),
   }
   vi.stubGlobal('fetch', api.fetch)
@@ -512,5 +526,85 @@ describe('resetting the lab', () => {
 
     expect(await screen.findByTestId('terminal')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Reiniciar laboratório' })).toBeNull()
+  })
+})
+
+describe('command history', () => {
+  const historyPath = (id: string, after = 0) => `/api/labs/${id}/history?after=${after}&limit=500`
+  const entry = (seq: number, command: string) => ({
+    seq,
+    command,
+    recorded_at: '2026-10-25T12:00:00Z',
+  })
+
+  function recorded(): string[] {
+    const list = screen.queryByRole('list', { name: 'Comandos registrados' })
+    if (!list) return []
+    return within(list)
+      .queryAllByRole('listitem')
+      .map((item) => item.querySelector('code')?.textContent ?? '')
+  }
+
+  it('tells the student what is recorded next to the terminal', async () => {
+    renderAt(path)
+    await screen.findByTestId('terminal')
+
+    const notice = screen.getByRole('note')
+    expect(notice.textContent).toContain('inclusive texto sensível e conteúdo de heredocs')
+    expect(notice.textContent).toContain('comece a linha com um espaço')
+    expect(notice.textContent).toContain('não há remoção automática')
+    const terminalSection = screen.getByTestId('terminal').closest('section')
+    expect(terminalSection?.getAttribute('aria-describedby')).toBe(notice.id)
+  })
+
+  it('shows the lab history and inserts a command without running it', async () => {
+    api.routes[`GET ${historyPath(labId)}`] = () =>
+      Response.json({ entries: [entry(1, 'ls -la'), entry(2, 'cat notas.txt')], more: false })
+    renderAt(path)
+    await waitFor(() => expect(recorded()).toEqual(['ls -la', 'cat notas.txt']))
+
+    const second = screen.getByText('cat notas.txt').closest('li') as HTMLElement
+    fireEvent.click(within(second).getByRole('button', { name: 'Inserir no terminal' }))
+
+    expect(terminal.inserted).toEqual(['cat notas.txt'])
+    expect(screen.getByText(/Revise e pressione Enter/)).toBeTruthy()
+    // Inserting sends nothing to the API.
+    expect(api.fetch.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true)
+  })
+
+  it('shows the history of an ended lab when asked', async () => {
+    api.routes[`GET /api/labs/${labId}`] = () =>
+      Response.json(lab({ status: 'terminated', end_reason: 'user', ended_at: 'x' }))
+    api.routes[`GET ${historyPath(labId)}`] = () =>
+      Response.json({ entries: [entry(1, 'ls')], more: false })
+    renderAt(path)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mostrar histórico de comandos' }))
+
+    await waitFor(() => expect(recorded()).toEqual(['ls']))
+    expect(screen.queryByRole('button', { name: 'Inserir no terminal' })).toBeNull()
+    expect(screen.queryByTestId('terminal')).toBeNull()
+  })
+
+  it("shows only the new lab's history after a reset", async () => {
+    const newLabId = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
+    api.routes[`GET ${historyPath(labId)}`] = () =>
+      Response.json({ entries: [entry(1, 'echo old-lab')], more: false })
+    api.routes[`GET ${historyPath(newLabId)}`] = () =>
+      Response.json({ entries: [], more: false })
+    api.routes[`POST /api/labs/${labId}/replace`] = () =>
+      Response.json(lab({ id: newLabId }), { status: 201 })
+    api.routes[`GET /api/labs/${newLabId}`] = () => Response.json(lab({ id: newLabId }))
+    api.routes['GET /api/labs/current'] = () => Response.json(lab({ id: newLabId }))
+    api.routes['GET /api/labs'] = () => Response.json([lab({ id: newLabId })])
+    renderAt(path)
+    await waitFor(() => expect(recorded()).toEqual(['echo old-lab']))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reiniciar laboratório' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Descartar e reiniciar' }))
+
+    expect(await screen.findByText('Nenhum comando registrado neste laboratório.')).toBeTruthy()
+    expect(screen.queryByText('echo old-lab')).toBeNull()
+    expect(terminal.mounted.has(newLabId)).toBe(true)
   })
 })

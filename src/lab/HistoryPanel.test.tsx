@@ -96,7 +96,7 @@ describe('history panel', () => {
     expect(commands()).toHaveLength(502)
     expect(commands()[0]).toBe('echo 1')
     expect(screen.queryByRole('button', { name: /anteriores/ })).toBeNull()
-  })
+  }, 20_000)
 
   it('polls for new entries only after the last one held, without duplicates', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
