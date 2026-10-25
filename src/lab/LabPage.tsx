@@ -5,7 +5,7 @@ import { ApiError } from '../auth/api.ts'
 import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { ConnectionStatus } from '../terminal/connection.ts'
 import { MAX_RECONNECT_ATTEMPTS, reconnectDelay } from '../terminal/reconnect.ts'
-import { Terminal } from '../terminal/Terminal.tsx'
+import { type Insert, Terminal } from '../terminal/Terminal.tsx'
 import {
   endReasonMessage,
   fetchLab,
@@ -15,6 +15,7 @@ import {
   wasReplaced,
 } from './api.ts'
 import { ConfirmReplace } from './ConfirmReplace.tsx'
+import { HISTORY_NOTICE_ID, HistoryNotice, HistoryPanel } from './HistoryPanel.tsx'
 import styles from './LabPage.module.css'
 import {
   labKeys,
@@ -138,6 +139,8 @@ function ReadyLab({
   const [retry, setRetry] = useState<Retry | null>(null)
   // Automatic attempts since the last successful connection.
   const attempts = useRef(0)
+  // Set by the terminal while it is mounted; the history panel inserts commands with it.
+  const insertRef = useRef<Insert | null>(null)
 
   const refreshLab = useCallback(
     () => void client.invalidateQueries({ queryKey: labKeys.one(lab.id) }),
@@ -233,14 +236,19 @@ function ReadyLab({
         </p>
       </header>
 
-      <section className={styles.workspace}>
-        <Terminal
-          labId={lab.id}
-          session={session}
-          closeRequested={closeRequested}
-          onStatus={onStatus}
-        />
-      </section>
+      <HistoryNotice />
+      <div className={styles.workspace}>
+        <section className={styles.terminal} aria-describedby={HISTORY_NOTICE_ID}>
+          <Terminal
+            labId={lab.id}
+            session={session}
+            closeRequested={closeRequested}
+            onStatus={onStatus}
+            insertRef={insertRef}
+          />
+        </section>
+        <HistoryPanel labId={lab.id} live insertRef={insertRef} />
+      </div>
       {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
       {confirming && lab.mission && (
         <ConfirmReplace
@@ -419,6 +427,7 @@ function AfterReplacement({
           {create.error.message}
         </p>
       )}
+      <HistoryPanel labId={lab.id} live={false} />
       <Link to="/">Voltar ao início</Link>
     </main>
   )
@@ -471,6 +480,7 @@ function EndedLab({ lab }: { lab: Lab }) {
           {create.error.message}
         </p>
       )}
+      <HistoryPanel labId={lab.id} live={false} />
       <Link to="/">Voltar ao início</Link>
     </main>
   )

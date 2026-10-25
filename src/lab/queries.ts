@@ -68,8 +68,10 @@ export const HISTORY_POLL_MS = 5000
 // again every HISTORY_POLL_MS, only while the tab is visible. Otherwise it is read once
 // when `enabled`, and again only when the page asks (refetch).
 //
-// The key is under ['labs'], which a session change drops (forgetUserData) and whose
-// queries in flight are cancelled then, so an answer for the previous user is not stored.
+// An answer for a previous user is never stored, for two reasons that each suffice: the
+// key is under ['labs'], which a session change drops (forgetUserData), and the request
+// uses the query's signal, so it is aborted once no page shows the history, as happens
+// whenever the session changes.
 export function useLabHistory(
   labId: string,
   { live, enabled }: { live: boolean; enabled: boolean },
