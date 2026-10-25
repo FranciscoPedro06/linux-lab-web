@@ -40,10 +40,11 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export async function apiRequest<T>(
   path: string,
-  { method = 'GET', body }: { method?: string; body?: unknown } = {},
+  { method = 'GET', body, signal }: { method?: string; body?: unknown; signal?: AbortSignal } = {},
   fetchImpl: FetchLike = fetch,
 ): Promise<T | undefined> {
   const init: RequestInit = { method, credentials: 'same-origin' }
+  if (signal) init.signal = signal
   if (method !== 'GET') {
     // Every non-GET request is JSON; the API refuses anything else.
     init.headers = { 'Content-Type': 'application/json' }

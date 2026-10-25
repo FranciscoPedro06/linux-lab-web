@@ -7,8 +7,10 @@ import {
   createLab,
   endLab,
   fetchCurrentLab,
+  fetchHistory,
   fetchLab,
   fetchLabs,
+  type HistoryEntry,
   isTransient,
   type Lab,
   replaceLab,
@@ -26,6 +28,8 @@ export const labKeys = {
   current: ['labs', 'current'] as const,
   list: ['labs', 'list'] as const,
   one: (id: string) => ['labs', 'one', id] as const,
+  // Under ['labs'], so it is dropped with the rest when the session changes.
+  history: (id: string) => ['labs', 'history', id] as const,
 }
 
 function pollInterval(lab: Lab | null | undefined): number | false {
@@ -52,6 +56,37 @@ export function useLab(id: string) {
     queryFn: () => fetchLab(id),
     refetchInterval: (query) => pollInterval(query.state.data),
     // A missing lab stays missing.
+    retry: (count, error) => error.status !== 404 && count < 1,
+  })
+}
+
+export const HISTORY_POLL_MS = 5000
+
+// The lab's command history, read incrementally: each fetch asks only for the entries
+// after the last one held and appends them, so polling never duplicates an entry and a
+// failed poll is made up by the next one. While `live` (the lab is ready) it is read
+// again every HISTORY_POLL_MS, only while the tab is visible. Otherwise it is read once
+// when `enabled`, and again only when the page asks (refetch).
+//
+// The key is under ['labs'], which a session change drops (forgetUserData) and whose
+// queries in flight are cancelled then, so an answer for the previous user is not stored.
+export function useLabHistory(
+  labId: string,
+  { live, enabled }: { live: boolean; enabled: boolean },
+) {
+  const client = useQueryClient()
+  return useQuery<HistoryEntry[], ApiError>({
+    queryKey: labKeys.history(labId),
+    queryFn: async ({ signal }) => {
+      const held = client.getQueryData<HistoryEntry[]>(labKeys.history(labId)) ?? []
+      const fresh = await fetchHistory(labId, held.at(-1)?.seq ?? 0, signal)
+      return fresh.length === 0 ? held : [...held, ...fresh]
+    },
+    enabled,
+    refetchInterval: live ? HISTORY_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    staleTime: live ? 0 : Infinity,
+    // A lab that does not exist (or is not the user's) stays that way.
     retry: (count, error) => error.status !== 404 && count < 1,
   })
 }
