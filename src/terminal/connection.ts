@@ -64,6 +64,10 @@ export class TerminalConnection {
     this.handlers.onStatus({ state: 'connecting' })
   }
 
+  get connected(): boolean {
+    return this.state === 'connected'
+  }
+
   send(data: string): void {
     if (this.state === 'connected') {
       this.socket.send(this.encoder.encode(data))
