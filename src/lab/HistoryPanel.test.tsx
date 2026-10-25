@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, apiError, labId } from '../testSupport.tsx'
 import type { HistoryEntry } from './api.ts'
+import type { Insert, InsertResult } from '../terminal/Terminal.tsx'
 import { HistoryPanel } from './HistoryPanel.tsx'
 import { HISTORY_POLL_MS, labKeys } from './queries.ts'
 
@@ -17,14 +18,28 @@ function page(entries: HistoryEntry[], more = false): Response {
 
 const historyPath = (after: number) => `/api/labs/${labId}/history?after=${after}&limit=500`
 
-function renderPanel(props: { live?: boolean; labId?: string } = {}) {
+function renderPanel(
+  props: { live?: boolean; labId?: string; insertRef?: { current: Insert | null } } = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const view = render(
     <QueryClientProvider client={client}>
-      <HistoryPanel labId={props.labId ?? labId} live={props.live ?? true} />
+      <HistoryPanel
+        labId={props.labId ?? labId}
+        live={props.live ?? true}
+        insertRef={props.insertRef}
+      />
     </QueryClientProvider>,
   )
   return { ...view, client }
+}
+
+function buttonOf(command: string, name: string): HTMLElement {
+  const item = screen
+    .getAllByRole('listitem')
+    .find((element) => element.querySelector('code')?.textContent === command)
+  if (!item) throw new Error(`no entry ${command}`)
+  return within(item).getByRole('button', { name })
 }
 
 function commands(): string[] {
@@ -52,7 +67,7 @@ describe('history panel', () => {
     api.routes[`GET ${historyPath(0)}`] = () => page([])
     renderPanel()
 
-    expect(screen.getByRole('status').textContent).toBe('Carregando o histórico…')
+    expect(screen.getByText('Carregando o histórico…')).toBeTruthy()
     expect(await screen.findByText('Nenhum comando registrado neste laboratório.')).toBeTruthy()
   })
 
@@ -172,5 +187,72 @@ describe('history panel', () => {
     await waitFor(() => expect(commands()).toEqual(['other lab']))
     expect(client.getQueryData(labKeys.history(labId))).toEqual([entry(1, 'mine')])
     second.unmount()
+  })
+
+  describe('copying and inserting', () => {
+    const multiline = 'for i in 1 2\ndo echo $i\ndone'
+
+    beforeEach(() => {
+      api.routes[`GET ${historyPath(0)}`] = () => page([entry(1, 'ls -la'), entry(2, multiline)])
+    })
+
+    it('copies the command exactly', async () => {
+      const writeText = vi.fn(() => Promise.resolve())
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+      renderPanel()
+      await waitFor(() => expect(commands()).toHaveLength(2))
+
+      fireEvent.click(buttonOf(multiline, 'Copiar'))
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(multiline))
+      expect(await screen.findByText('Comando copiado.')).toBeTruthy()
+    })
+
+    it('says so when the clipboard refuses', async () => {
+      const writeText = vi.fn(() => Promise.reject(new Error('denied')))
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+      renderPanel()
+      await waitFor(() => expect(commands()).toHaveLength(2))
+
+      fireEvent.click(buttonOf('ls -la', 'Copiar'))
+
+      expect(await screen.findByText(/Não foi possível copiar/)).toBeTruthy()
+    })
+
+    it('hands the command to the terminal and never runs it', async () => {
+      const results: InsertResult[] = ['inserted', 'needs_bracketed_paste']
+      const insert = vi.fn<Insert>(() => results.shift() ?? 'inserted')
+      renderPanel({ insertRef: { current: insert } })
+      await waitFor(() => expect(commands()).toHaveLength(2))
+
+      fireEvent.click(buttonOf('ls -la', 'Inserir no terminal'))
+      expect(insert).toHaveBeenLastCalledWith('ls -la')
+      expect(screen.getByText(/Revise e pressione Enter para executar/)).toBeTruthy()
+
+      fireEvent.click(buttonOf(multiline, 'Inserir no terminal'))
+      expect(insert).toHaveBeenLastCalledWith(multiline)
+      expect(screen.getByText(/mais de uma linha/)).toBeTruthy()
+      expect(api.fetch.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(
+        true,
+      )
+    })
+
+    it('reports a terminal that is not open', async () => {
+      renderPanel({ insertRef: { current: null } })
+      await waitFor(() => expect(commands()).toHaveLength(2))
+
+      fireEvent.click(buttonOf('ls -la', 'Inserir no terminal'))
+
+      expect(screen.getByText('O terminal não está conectado.')).toBeTruthy()
+    })
+
+    it('offers no insertion without a terminal', async () => {
+      renderPanel({ live: false })
+      fireEvent.click(screen.getByRole('button', { name: 'Mostrar histórico de comandos' }))
+      await waitFor(() => expect(commands()).toHaveLength(2))
+
+      expect(screen.queryByRole('button', { name: 'Inserir no terminal' })).toBeNull()
+      expect(screen.getAllByRole('button', { name: 'Copiar' })).toHaveLength(2)
+    })
   })
 })

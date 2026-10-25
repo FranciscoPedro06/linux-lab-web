@@ -1,4 +1,5 @@
-import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from 'react'
+import type { Insert, InsertResult } from '../terminal/Terminal.tsx'
 import { type HistoryEntry, MAX_HISTORY_ENTRIES } from './api.ts'
 import styles from './HistoryPanel.module.css'
 import { useLabHistory } from './queries.ts'
@@ -21,18 +22,25 @@ export function HistoryNotice() {
   )
 }
 
+const insertMessage: Record<InsertResult, string> = {
+  inserted: 'Comando inserido no terminal. Revise e pressione Enter para executar.',
+  not_connected: 'O terminal não está conectado.',
+  needs_bracketed_paste:
+    'Este comando tem mais de uma linha e o terminal não confirmou que pode recebê-lo sem executá-lo. Use Copiar.',
+}
+
 // The lab's command history. While the lab is ready (`live`) it is read every few
 // seconds; for an ended lab it is read only when the student asks. Commands are shown
-// as text, never interpreted.
+// as text, never interpreted. Each can be copied, and, with `insertRef` (the lab's
+// open terminal), put on the command line without being run.
 export function HistoryPanel({
   labId,
   live,
-  actions,
+  insertRef,
 }: {
   labId: string
   live: boolean
-  // Buttons for one entry, e.g. copy and insert into the terminal.
-  actions?: (entry: HistoryEntry) => ReactNode
+  insertRef?: RefObject<Insert | null>
 }) {
   const [requested, setRequested] = useState(live)
   const history = useLabHistory(labId, { live, enabled: requested })
@@ -40,6 +48,8 @@ export function HistoryPanel({
   const list = useRef<HTMLOListElement>(null)
   // Whether the list was scrolled to its end before new entries arrived.
   const atEnd = useRef(true)
+  // The outcome of the last copy or insert, announced to screen readers.
+  const [feedback, setFeedback] = useState<string | null>(null)
   const entries = history.data ?? []
   const visible = entries.slice(-shown)
   const hidden = entries.length - visible.length
@@ -48,6 +58,21 @@ export function HistoryPanel({
     const element = list.current
     if (element && atEnd.current) element.scrollTop = element.scrollHeight
   }, [entries.length])
+
+  async function copy(entry: HistoryEntry) {
+    try {
+      if (!navigator.clipboard) throw new Error('no clipboard')
+      await navigator.clipboard.writeText(entry.command)
+      setFeedback('Comando copiado.')
+    } catch {
+      setFeedback('Não foi possível copiar. Selecione o texto do comando e copie manualmente.')
+    }
+  }
+
+  function insert(entry: HistoryEntry) {
+    const result = insertRef?.current?.(entry.command) ?? 'not_connected'
+    setFeedback(insertMessage[result])
+  }
 
   let body: ReactNode
   if (!requested) {
@@ -106,7 +131,14 @@ export function HistoryPanel({
               </pre>
               <div className={styles.meta}>
                 <time dateTime={entry.recorded_at}>{formatTime(entry.recorded_at)}</time>
-                {actions?.(entry)}
+                <button type="button" onClick={() => void copy(entry)}>
+                  Copiar
+                </button>
+                {insertRef && (
+                  <button type="button" onClick={() => insert(entry)}>
+                    Inserir no terminal
+                  </button>
+                )}
               </div>
             </li>
           ))}
@@ -122,6 +154,9 @@ export function HistoryPanel({
       </h2>
       {!live && <HistoryNotice />}
       {body}
+      <p className={styles.muted} role="status" aria-live="polite">
+        {feedback}
+      </p>
       {history.isError && history.data !== undefined && (
         <p className={styles.error} role="alert">
           Não foi possível atualizar o histórico.{' '}

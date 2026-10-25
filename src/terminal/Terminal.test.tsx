@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSocket } from './fakeSocket.ts'
-import { Terminal } from './Terminal.tsx'
+import { type Insert, type InsertResult, Terminal } from './Terminal.tsx'
 
 // xterm.js renders to a canvas-like DOM that jsdom does not support, so the terminal
 // emulator is replaced by a recorder. The connection and the component are real.
@@ -15,6 +15,8 @@ vi.mock('@xterm/xterm', () => {
     element: HTMLElement | null = null
     written: Uint8Array[] = []
     disposed = false
+    focused = 0
+    modes = { bracketedPasteMode: false }
     dataHandler: (data: string) => void = () => {}
     resizeHandler: (size: { cols: number; rows: number }) => void = () => {}
     constructor() {
@@ -24,7 +26,17 @@ vi.mock('@xterm/xterm', () => {
     open(element: HTMLElement) {
       this.element = element
     }
-    focus() {}
+    focus() {
+      this.focused += 1
+    }
+    // As xterm.js does: line breaks become carriage returns, and the text is wrapped
+    // in bracketed paste markers when the program turned that mode on.
+    paste(text: string) {
+      const data = text.replace(/\r?\n/g, '\r')
+      this.dataHandler(
+        this.modes.bracketedPasteMode ? `\x1b[200~${data}\x1b[201~` : data,
+      )
+    }
     write(data: Uint8Array) {
       this.written.push(data)
     }
@@ -46,6 +58,8 @@ vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit() {} } }))
 
 type RecordingTerminal = {
   element: HTMLElement | null
+  focused: number
+  modes: { bracketedPasteMode: boolean }
   written: Uint8Array[]
   disposed: boolean
   dataHandler: (data: string) => void
@@ -61,6 +75,7 @@ function lastTerminal(): RecordingTerminal {
 
 function renderTerminal(props: { closeRequested?: boolean } = {}) {
   const onStatus = vi.fn()
+  const insertRef: { current: Insert | null } = { current: null }
   const view = render(
     <Terminal
       labId="abc"
@@ -68,10 +83,18 @@ function renderTerminal(props: { closeRequested?: boolean } = {}) {
       closeRequested={props.closeRequested ?? false}
       onStatus={onStatus}
       socketFactory={FakeSocket.factory}
+      insertRef={insertRef}
     />,
   )
-  return { ...view, onStatus, socket: FakeSocket.last(), terminal: lastTerminal() }
+  return { ...view, onStatus, insertRef, socket: FakeSocket.last(), terminal: lastTerminal() }
 }
+
+function insert(ref: { current: Insert | null }, text: string): InsertResult {
+  if (!ref.current) throw new Error('no insert function')
+  return ref.current(text)
+}
+
+const encoded = (text: string) => new TextEncoder().encode(text)
 
 beforeEach(() => {
   FakeSocket.instances = []
@@ -154,5 +177,50 @@ describe('Terminal', () => {
 
     expect(socket.closedWith).toBe(1000)
     expect(terminal.disposed).toBe(true)
+  })
+
+  describe('inserting a command', () => {
+    it('needs an open connection', () => {
+      const { socket, insertRef } = renderTerminal()
+
+      expect(insert(insertRef, 'ls -la')).toBe('not_connected')
+      socket.open()
+      expect(insert(insertRef, 'ls -la')).toBe('not_connected')
+      expect(socket.sent.filter((message) => typeof message !== 'string')).toEqual([])
+    })
+
+    it('pastes a single line exactly, with no Enter', () => {
+      const { socket, terminal, insertRef } = renderTerminal()
+      socket.ready()
+
+      expect(insert(insertRef, 'grep -r "x y" .')).toBe('inserted')
+
+      expect(socket.sent.at(-1)).toEqual(encoded('grep -r "x y" .'))
+      expect(terminal.focused).toBeGreaterThan(0)
+    })
+
+    it('pastes several lines only inside bracketed paste markers', () => {
+      const { socket, terminal, insertRef } = renderTerminal()
+      socket.ready()
+      const command = 'for i in 1 2\ndo echo $i\ndone'
+
+      expect(insert(insertRef, command)).toBe('needs_bracketed_paste')
+      expect(socket.sent.filter((message) => typeof message !== 'string')).toEqual([])
+
+      terminal.modes.bracketedPasteMode = true
+      expect(insert(insertRef, command)).toBe('inserted')
+      expect(socket.sent.at(-1)).toEqual(
+        encoded('\x1b[200~for i in 1 2\rdo echo $i\rdone\x1b[201~'),
+      )
+    })
+
+    it('is gone once the terminal is unmounted', () => {
+      const { socket, insertRef, unmount } = renderTerminal()
+      socket.ready()
+
+      unmount()
+
+      expect(insertRef.current).toBeNull()
+    })
   })
 })
