@@ -22,6 +22,8 @@ A user has one active lab. While it exists, the page of another mission links to
 
 On the lab page, the student asks the API to verify the lab and sees, condition by condition, whether the lab meets the mission. The first validation that passes records the completion of the mission, which the panel announces; a later one says the mission was already completed, and a failing one that the earlier completion is kept. An operational error is shown as a failure of the check, not of the student.
 
+Next to the terminal, the lab page shows the lab's command history: the lines the lab's bash accepted, as the API recorded them. A notice above the terminal says, before it is used, that commands sent to bash may be saved, sensitive text and heredoc bodies included, that the history stays readable by its owner after the lab ends, that starting a line with a space tries to keep it out, that this is no guarantee, and that nothing removes passwords, tokens or other secrets automatically. Each command can be copied or inserted into the terminal without being run. An ended lab shows its history when asked.
+
 The catalog and the mission page mark completed missions. A completion belongs to the mission, not to a version: one recorded on an earlier version stays a completion and names that version. The mission page compares it with the catalog's version, not with the version of the user's lab it may be showing.
 
 After a validation, the progress in the response replaces the cached one in the catalog and the mission detail. If the request fails without an answer from the API (a dropped connection or a 5xx), the completion may have been stored anyway, so both are read again from the API; the validation itself is never retried.
@@ -47,7 +49,7 @@ The interface text is in Portuguese.
 | `/login` | Email and password | Implemented |
 | `/signup` | Name, email, password and invite code (required during the closed beta) | Implemented |
 | `/` | Signed out: links to login and sign-up. Signed in: the current lab and its mission (preparing, ready with a link to its terminal and an end button, ending), the published modules and their missions, previous labs with their mission and end reason, and logout. Completed missions are marked | Implemented |
-| `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal, the validation panel and a reset, or ended with the reason and a button to start a new lab for the same mission. A lab that was reset or switched points to the user's current lab instead. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
+| `/labs/:id` | The lab's state from the API and its mission and version: preparing, ready with the terminal, the history notice and panel, the validation panel and a reset, or ended with the reason, its command history on request and a button to start a new lab for the same mission. A lab that was reset or switched points to the user's current lab instead. Requires a session; a lab of another user or an unknown id shows "not found" | Implemented |
 | `/missions/:slug` | Module, title, summary, difficulty, estimated time and tags; the problem (Markdown), objectives and hints; the user's lab for it: a button to start one, a link to the one already open for this mission, or, when the active lab is for another mission, a link to it and a switch to this mission; whether the user completed the mission, and on which version if not the current one. Requires a session; an unknown or unpublished mission shows "not found" | Implemented |
 | `/missions/:slug` with a lab | The explanation and solutions after completion (candidate for increment 14); the terminal and validation stay on `/labs/:id` | Planned |
 
@@ -82,6 +84,15 @@ Both call `POST /api/labs/{id}/replace` with `{ "mission_slug": ... }`: the lab'
 - A lost answer (`network_error`) or a `500` is reported as "Não foi possível confirmar o resultado", and the state read again decides what is offered; nothing destructive is sent before it.
 - An ended lab with `end_reason` `reset` or `mission_switch` explains it and points to the current lab, if any.
 
+## Command history
+
+`fetchHistory` in `src/lab/api.ts` calls `GET /api/labs/{id}/history?after=<seq>&limit=500` until `more` is false; `useLabHistory` in `src/lab/queries.ts` keeps the entries under `['labs', 'history', id]`. Each read asks only for entries after the last one held and keeps only greater `seq` values, so polling and overlapping pages never show an entry twice, and a failed read is made up by the next one. While the lab is `ready` the history is read every 5 seconds, only while the tab is visible; for an ended lab it is read once, when the student asks, and never polled. The client never writes to the history: entries are recorded by the API from the terminal only.
+
+`src/lab/HistoryPanel.tsx` shows the entries in `seq` order as plain text (`<pre><code>`), the newest 200 first with a button for earlier ones, and scrolls to new entries when the list is already at its end. It has loading, empty and error states with a retry, keeps the entries it has when a refresh fails, and says when the lab reached the API's limit of 2000 entries. Switching to another lab mounts a new page, so nothing of the previous lab's history is shown, and the key's `['labs']` prefix is dropped with the other labs when the session changes. Requests also use the query's abort signal, so an answer meant for a previous user is discarded.
+
+- **Copy** writes the command to the clipboard with `navigator.clipboard.writeText`, or says to copy it by hand when the browser refuses.
+- **Insert** hands the command to the open terminal (`insertRef` of `src/terminal/Terminal.tsx`), which pastes it with xterm.js's `paste`: no Enter is added, and the student runs it with Enter after reviewing it. bash turns on bracketed paste at its prompt, so xterm.js wraps the text in paste markers and line breaks stay part of the command line instead of running it. A command with a line break is inserted only while the terminal reports bracketed paste on; otherwise the panel asks to copy it instead. Insertion needs a connected terminal and is not offered for ended labs.
+
 ## Validation
 
 The validation panel sits on `/labs/:id`, below the terminal, so the student checks the lab without leaving it. `validateLab` in `src/lab/api.ts` calls `POST /api/labs/{id}/validate`; `useValidateLab` in `src/lab/queries.ts` runs it as a TanStack Query mutation with no automatic retry. Nothing is validated automatically: the request is sent only when the student presses "Verificar", the button is disabled while it runs, and a failed request is repeated only from an explicit "Tentar novamente".
@@ -114,7 +125,7 @@ The client implements the protocol described in [docs/terminal.md](https://githu
 | 4409, 4000, 1000, 1008, 1009 | Shows the reason and a Reconnect button; no automatic reconnection |
 | 1001, 1006, 1011, 1012, 1013, 1014 | Reconnects automatically after 1, 2, 4, 8 and 16 seconds, at most 5 times, each time only if the API still reports the lab `ready`; then stops and offers Reconnect |
 
-Each reconnect opens a new shell in the same lab.
+Each reconnect opens a new shell in the same lab. The lab's command history continues across reconnects.
 
 ## Stack
 
@@ -156,13 +167,13 @@ npm run build
 
 CI runs the same commands.
 
-- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home, lab and mission pages against a fake `fetch`, including lab states, OOM, 4401, 4410, automatic reconnection with fake timers, the catalog's empty, error and not found states, Markdown with raw HTML, the validation panel (loading, first completion, a mission completed before, a failure after a completion, operational error, refusals, the answer field and the absence of automatic retries), and progress (completed and not completed missions, a completion on an earlier version, the cache updated from the response, and progress read again after a network or server failure).
+- **Vitest:** the terminal client (protocol, input, output, resize, close codes) against a fake WebSocket; the reconnection policy; the terminal component in jsdom with xterm.js replaced by a recorder; the authentication client; the login, sign-up, home, lab and mission pages against a fake `fetch`, including lab states, OOM, 4401, 4410, automatic reconnection with fake timers, the catalog's empty, error and not found states, Markdown with raw HTML, the validation panel (loading, first completion, a mission completed before, a failure after a completion, operational error, refusals, the answer field and the absence of automatic retries), and progress (completed and not completed missions, a completion on an earlier version, the cache updated from the response, and progress read again after a network or server failure), and the command history (empty and filled, pages, polling without duplicates, failed refreshes, the limit, ended labs read on request, copy, insertion without Enter and bracketed paste for several lines, the notice, a lab switch, and an answer for a previous user never stored).
 - **Browser:** each increment is checked by hand in Chromium (Playwright) against the Compose environment, with real cookies, WebSocket and Docker; an automated end-to-end suite is planned.
 - **TypeScript** in strict mode.
 
 ## Status
 
-Increments 01 and 03 to 10 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, the validation panel on the lab page, the user's progress in the catalog, the mission page and the panel, and lab reset and mission switching. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10.
+Increments 01, 03 to 10 and 12 are done here: Vite, React and TypeScript setup with CI, the terminal page with xterm.js, login and sign-up, labs tied to the account with their lifecycle and terminal reconnection, the mission catalog and mission page, then labs started from a mission, the validation panel on the lab page, the user's progress in the catalog, the mission page and the panel, and lab reset and mission switching, and the command history next to the terminal. Development order follows [linux-lab-api](https://github.com/FranciscoPedro06/linux-lab-api): the terminal lands in increment 03, authentication in 04, the catalog and mission page in 06, labs started for a mission in 07, validation and progress in 08 and 09, reset and mission switching in 10, the command history in 12.
 
 ## License
 
