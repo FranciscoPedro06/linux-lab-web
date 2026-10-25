@@ -127,6 +127,51 @@ export function wasReplaced(reason: EndReason | null): boolean {
   return reason === 'reset' || reason === 'mission_switch'
 }
 
+// Command history (GET /api/labs/{id}/history): the lines the lab's interactive bash
+// accepted, as the API observed them, in `seq` order. An entry does not mean the
+// command ran or succeeded; `recorded_at` is when the API saw the line.
+export type HistoryEntry = {
+  seq: number
+  command: string
+  recorded_at: string
+}
+
+type HistoryPage = { entries: HistoryEntry[]; more: boolean }
+
+// The API keeps at most this many entries per lab; later lines are not recorded.
+export const MAX_HISTORY_ENTRIES = 2000
+const HISTORY_PAGE_SIZE = 500
+
+// Entries after `after`, reading every page there is. Only entries with a greater seq
+// than the previous one are kept, so a page that overlaps another adds nothing twice.
+export async function fetchHistory(
+  id: string,
+  after: number,
+  signal?: AbortSignal,
+  fetchImpl?: FetchLike,
+): Promise<HistoryEntry[]> {
+  const entries: HistoryEntry[] = []
+  let last = after
+  // A lab holds at most MAX_HISTORY_ENTRIES, so a few pages always suffice.
+  for (let page = 0; page < MAX_HISTORY_ENTRIES / HISTORY_PAGE_SIZE + 1; page++) {
+    const query = `after=${last}&limit=${HISTORY_PAGE_SIZE}`
+    const result = await apiRequest<HistoryPage>(
+      `/api/labs/${encodeURIComponent(id)}/history?${query}`,
+      { signal },
+      fetchImpl,
+    )
+    if (!result) throw unexpected()
+    for (const entry of result.entries) {
+      if (entry.seq > last) {
+        entries.push(entry)
+        last = entry.seq
+      }
+    }
+    if (!result.more || result.entries.length === 0) break
+  }
+  return entries
+}
+
 // Validation (POST /api/labs/{id}/validate). The API checks the lab's state against
 // the mission version the lab was created for; the client sends at most an answer.
 export type ValidationStatus = 'passed' | 'failed' | 'error'
