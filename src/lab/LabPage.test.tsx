@@ -6,6 +6,9 @@ import { ana, api, apiError, lab, labId, missionDetail, renderAt, signedOut } fr
 
 // A stand-in terminal that records its props, so the test can play the connection, and
 // which labs have a terminal mounted (unmounting the real one closes its connection).
+// The mount is recorded in a layout effect, which runs in the same commit as the DOM
+// change: a test that has found the terminal on the page can read `mounted` at once.
+// With a passive effect, `mounted` could still lag behind the page at that point.
 const terminal = vi.hoisted(() => ({
   mounts: 0,
   sessions: [] as number[],
@@ -17,7 +20,7 @@ const terminal = vi.hoisted(() => ({
 }))
 
 vi.mock('../terminal/Terminal.tsx', async () => {
-  const { useEffect } = await vi.importActual<typeof import('react')>('react')
+  const { useLayoutEffect } = await vi.importActual<typeof import('react')>('react')
   return {
     Terminal: (props: {
       labId: string
@@ -34,7 +37,7 @@ vi.mock('../terminal/Terminal.tsx', async () => {
         }
       }
       if (terminal.sessions.at(-1) !== props.session) terminal.sessions.push(props.session)
-      useEffect(() => {
+      useLayoutEffect(() => {
         terminal.mounted.add(props.labId)
         return () => {
           terminal.mounted.delete(props.labId)
