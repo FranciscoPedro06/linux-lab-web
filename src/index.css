@@ -123,13 +123,18 @@ button {
   cursor: pointer;
 }
 
+/* The brackets are drawn only: empty alternative text keeps them out of the button's
+   name, so "[ Copiar ]" is named Copiar. The plain value first is for browsers without
+   alternative text for generated content. */
 button::before {
   content: '[ ';
+  content: '[ ' / '';
   color: var(--dim);
 }
 
 button::after {
   content: ' ]';
+  content: ' ]' / '';
   color: var(--dim);
 }
 
@@ -248,13 +253,17 @@ summary::-webkit-details-marker {
   display: none;
 }
 
+/* Drawn only, like the brackets of buttons: <details> already tells screen readers
+   whether it is open, so the name is the summary's own text. */
 summary::before {
   content: '[+] ';
+  content: '[+] ' / '';
   color: var(--dim);
 }
 
 details[open] > summary::before {
   content: '[-] ';
+  content: '[-] ' / '';
 }
 
 summary:hover {
