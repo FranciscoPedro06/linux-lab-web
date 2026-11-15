@@ -23,10 +23,11 @@
   color: var(--fg);
 }
 
-/* The page's own segments: they take the free space, so the lab's state sits right. */
+/* The page's own segments: they take the free space, so the lab's state sits right.
+   With less than 24 columns left beside the name, they take a line of their own. */
 .page {
   display: flex;
-  flex: 1;
+  flex: 1 1 24ch;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0 2ch;
