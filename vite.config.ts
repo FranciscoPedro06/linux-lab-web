@@ -20,5 +20,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // CSS is left out of tests, except stylesheets a test reads as text (`?raw`).
+    css: { include: [/\?raw$/] },
   },
 })

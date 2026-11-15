@@ -55,7 +55,12 @@ export function LoginPage() {
               {login.error.message}
             </p>
           )}
-          <button className={styles.button} type="submit" disabled={login.isPending}>
+          <button
+            className={styles.button}
+            type="submit"
+            disabled={login.isPending}
+            aria-busy={login.isPending || undefined}
+          >
             {login.isPending ? 'Entrando…' : 'Entrar'}
           </button>
         </form>

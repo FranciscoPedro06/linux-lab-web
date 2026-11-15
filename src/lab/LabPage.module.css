@@ -155,6 +155,7 @@
 }
 
 .primary {
+  --open: '';
   padding: 0 1ch;
   background: var(--fg);
   color: var(--bg);

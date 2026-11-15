@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { Lab } from '../lab/api.ts'
-import { ConfirmReplace } from '../lab/ConfirmReplace.tsx'
+import { ConfirmReplace, useConfirmation } from '../lab/ConfirmReplace.tsx'
 import { useCreateLab, useCurrentLab, useReplaceLab } from '../lab/queries.ts'
 import { difficultyLabel, type MissionDetail, minutesLabel } from './api.ts'
 import { Completion } from './Completion.tsx'
@@ -136,7 +136,7 @@ function MissionLab({ slug }: { slug: string }) {
       </h2>
       {create.isPending ? (
         <>
-          <button className={styles.button} type="button" disabled>
+          <button className={styles.button} type="button" disabled aria-busy="true">
             Preparando…
           </button>
           <p className={styles.muted} role="status">
@@ -145,7 +145,7 @@ function MissionLab({ slug }: { slug: string }) {
         </>
       ) : replace.isPending ? (
         <>
-          <button className={styles.button} type="button" disabled>
+          <button className={styles.button} type="button" disabled aria-busy="true">
             Trocando de missão…
           </button>
           <p className={styles.muted} role="status">
@@ -211,7 +211,7 @@ function ActiveLab({
   onSwitch: () => void
   onRetry?: () => void
 }) {
-  const [confirming, setConfirming] = useState(false)
+  const { open: confirming, opener, show, cancel, close } = useConfirmation()
   if (lab.status === 'terminating') {
     return (
       <>
@@ -251,9 +251,9 @@ function ActiveLab({
           <ConfirmReplace
             title="Trocar de missão?"
             confirmLabel="Descartar e trocar"
-            onCancel={() => setConfirming(false)}
+            onCancel={cancel}
             onConfirm={() => {
-              setConfirming(false)
+              close()
               onSwitch()
             }}
           >
@@ -261,7 +261,12 @@ function ActiveLab({
             temporário dele serão descartados. Um laboratório novo será criado para esta missão.
           </ConfirmReplace>
         ) : (
-          <button className={styles.button} type="button" onClick={() => setConfirming(true)}>
+          <button
+            ref={opener}
+            className={styles.button}
+            type="button"
+            onClick={show}
+          >
             Trocar para esta missão
           </button>
         ))}
