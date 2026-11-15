@@ -33,7 +33,7 @@ Every text pair named in the token notes is at least 4.5:1 in both themes.
 
 Brazilian Portuguese, direct, addressing the student as **você**, the way a Unix system writes: short, lowercase where it is machine output, normal sentences where it is conversation.
 
-- **Buttons:** an infinitive verb in brackets, `[ Verificar ]`, `[ Tentar novamente ]`. The brackets are CSS (`button::before`/`::after` in `src/index.css`), not text.
+- **Buttons:** an infinitive verb in brackets, `[ Verificar ]`, `[ Tentar novamente ]`. The brackets are CSS (`button::before`/`::after` in `src/index.css`), not text, with empty alternative text: they are drawn but not part of the button's name, which is the verb alone (`Tentar novamente`). The `[+]`/`[-]` of hints are drawn the same way.
 - **In progress:** gerund with a single-character ellipsis: `Verificando…`.
 - **Comments:** notices as shell comments in `--dim`: `# Os comandos enviados ao Bash podem ser salvos…`.
 - **Errors:** `erro: ` in `--red` (CSS) and the API's message.
