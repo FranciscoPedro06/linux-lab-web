@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../auth/api.ts'
 import { useAuth, useRecheckSession } from '../auth/session.ts'
@@ -119,6 +120,16 @@ function MissionLine({ mission }: { mission: LabMission | null }) {
 
 type Retry = { attempt: number; delay: number }
 
+// On a phone the lab shows one area at a time (LabPage.module.css); bash comes first.
+// The three stay mounted whatever is shown, so switching never closes the terminal.
+type View = 'terminal' | 'criteria' | 'history'
+
+const viewLabel: Record<View, string> = {
+  terminal: 'Terminal',
+  criteria: 'Critérios',
+  history: 'Histórico',
+}
+
 function ReadyLab({
   lab,
   onReplace,
@@ -142,6 +153,20 @@ function ReadyLab({
   const attempts = useRef(0)
   // Set by the terminal while it is mounted; the history panel inserts commands with it.
   const insertRef = useRef<Insert | null>(null)
+  const [view, setView] = useState<View>('terminal')
+  const viewIds = { terminal: useId(), criteria: useId(), history: useId() }
+  // What the history panel calls: bash is shown first, so the inserted text is seen and
+  // the terminal can take the focus; if nothing was inserted, the panel comes back with
+  // its message.
+  const historyInsert = useRef<Insert | null>(null)
+  useEffect(() => {
+    historyInsert.current = (text) => {
+      flushSync(() => setView('terminal'))
+      const result = insertRef.current?.(text) ?? 'not_connected'
+      if (result !== 'inserted') setView('history')
+      return result
+    }
+  }, [])
 
   const refreshLab = useCallback(
     () => void client.invalidateQueries({ queryKey: labKeys.one(lab.id) }),
@@ -236,8 +261,27 @@ function ReadyLab({
       <main className={styles.page}>
         <h1 className="visually-hidden">Laboratório</h1>
         <HistoryNotice />
-        <div className={styles.workspace}>
-          <section className={styles.terminal} aria-describedby={HISTORY_NOTICE_ID}>
+        <div className={styles.views} role="group" aria-label="Área do laboratório">
+          {(Object.keys(viewLabel) as View[])
+            .filter((name) => name !== 'criteria' || lab.mission)
+            .map((name) => (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={view === name}
+                aria-controls={viewIds[name]}
+                onClick={() => setView(name)}
+              >
+                {viewLabel[name]}
+              </button>
+            ))}
+        </div>
+        <div className={styles.workspace} data-view={view}>
+          <section
+            id={viewIds.terminal}
+            className={styles.terminal}
+            aria-describedby={HISTORY_NOTICE_ID}
+          >
             <Terminal
               labId={lab.id}
               session={session}
@@ -247,8 +291,14 @@ function ReadyLab({
             />
           </section>
           <div className={styles.side}>
-            {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
-            <HistoryPanel labId={lab.id} live insertRef={insertRef} />
+            {lab.mission && (
+              <div id={viewIds.criteria} className={styles.criteria}>
+                <ValidationPanel labId={lab.id} mission={lab.mission} />
+              </div>
+            )}
+            <div id={viewIds.history} className={styles.history}>
+              <HistoryPanel labId={lab.id} live insertRef={historyInsert} />
+            </div>
           </div>
         </div>
         {confirming && lab.mission && (
