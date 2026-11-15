@@ -6,6 +6,7 @@ import { Catalog } from './catalog/Catalog.tsx'
 import { endReasonMessage, type Lab, statusLabel } from './lab/api.ts'
 import home from './lab/LabPanel.module.css'
 import { useCurrentLab, useEndLab, useRecentLabs } from './lab/queries.ts'
+import { TopBar } from './TopBar.tsx'
 
 const RECENT_LABS = 5
 
@@ -14,54 +15,55 @@ export function HomePage() {
   const logout = useLogout()
 
   return (
-    <main className={home.page}>
-      {auth.status === 'anonymous' ? <Banner /> : <h1 className={styles.title}>Linux Lab</h1>}
-      {auth.status === 'loading' && (
-        <p className={styles.muted} role="status">
-          Carregando…
-        </p>
-      )}
-      {auth.status === 'error' && (
-        <>
-          <p className={styles.error} role="alert">
-            {auth.message}
+    <>
+      <TopBar />
+      <main className={home.page}>
+        {auth.status === 'anonymous' && <Banner />}
+        {(auth.status === 'loading' || auth.status === 'error') && (
+          <h1 className="visually-hidden">Linux Lab</h1>
+        )}
+        {auth.status === 'loading' && (
+          <p className={styles.muted} role="status">
+            Carregando…
           </p>
-          <button className={styles.button} type="button" onClick={auth.retry}>
-            Tentar novamente
-          </button>
-        </>
-      )}
-      {auth.status === 'anonymous' && (
-        <>
-          <p>Aprenda Linux resolvendo problemas em um terminal real.</p>
-          <nav className={styles.links}>
-            <Link to="/login">Entrar</Link>
-            <Link to="/signup">Criar conta</Link>
-          </nav>
-        </>
-      )}
-      {auth.status === 'authenticated' && (
-        <>
-          <p>Olá, {auth.user.display_name}.</p>
-          <CurrentLab />
-          <Catalog />
-          <RecentLabs />
-          {logout.error && (
+        )}
+        {auth.status === 'error' && (
+          <>
             <p className={styles.error} role="alert">
-              {logout.error.message}
+              {auth.message}
             </p>
-          )}
-          <button
-            className={styles.button}
-            type="button"
-            disabled={logout.isPending}
-            onClick={() => logout.mutate()}
-          >
-            {logout.isPending ? 'Saindo…' : 'Sair'}
-          </button>
-        </>
-      )}
-    </main>
+            <button className={styles.button} type="button" onClick={auth.retry}>
+              Tentar novamente
+            </button>
+          </>
+        )}
+        {/* Entrar and Criar conta are in the top bar. */}
+        {auth.status === 'anonymous' && (
+          <p>Aprenda Linux resolvendo problemas em um terminal real.</p>
+        )}
+        {auth.status === 'authenticated' && (
+          <>
+            <h1 className={styles.title}>Olá, {auth.user.display_name}.</h1>
+            <CurrentLab />
+            <Catalog />
+            <RecentLabs />
+            {logout.error && (
+              <p className={styles.error} role="alert">
+                {logout.error.message}
+              </p>
+            )}
+            <button
+              className={styles.button}
+              type="button"
+              disabled={logout.isPending}
+              onClick={() => logout.mutate()}
+            >
+              {logout.isPending ? 'Saindo…' : 'Sair'}
+            </button>
+          </>
+        )}
+      </main>
+    </>
   )
 }
 

@@ -6,6 +6,7 @@ import { useAuth, useRecheckSession } from '../auth/session.ts'
 import type { ConnectionStatus } from '../terminal/connection.ts'
 import { MAX_RECONNECT_ATTEMPTS, reconnectDelay } from '../terminal/reconnect.ts'
 import { type Insert, Terminal } from '../terminal/Terminal.tsx'
+import { TopBar } from '../TopBar.tsx'
 import {
   endReasonMessage,
   fetchLab,
@@ -67,7 +68,7 @@ function LabView({ labId }: { labId: string }) {
     if (unauthorized) recheckSession()
   }, [unauthorized, recheckSession])
 
-  if (lab.isPending) return <Message text="Carregando o laboratório…" />
+  if (lab.isPending) return <Message text="Carregando o laboratório…" pending />
   // A failed refresh keeps showing the lab as last reported; only a lab never
   // loaded shows the error.
   if (lab.isError && lab.data === undefined) {
@@ -89,7 +90,7 @@ function LabView({ labId }: { labId: string }) {
     )
   }
   if (current.status === 'provisioning') {
-    return <Message text="Preparando o laboratório…" mission={current.mission} />
+    return <Message text="Preparando o laboratório…" lab={current} />
   }
   if (failure || wasReplaced(current.end_reason)) {
     const missionSlug = replace.variables?.missionSlug ?? current.mission?.slug ?? null
@@ -216,11 +217,8 @@ function ReadyLab({
   const gaveUp = closed && !retry && reconnectDelay(status.code, 0) !== null
 
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>
-          <Link to="/">Linux Lab</Link>
-        </h1>
+    <div className={styles.screen}>
+      <TopBar lab={lab}>
         <MissionLine mission={lab.mission} />
         <p className={styles.status} role="status">
           Estado: <span data-state={status.state}>{stateLabel[status.state]}</span>
@@ -234,82 +232,84 @@ function ReadyLab({
           )}
           {gaveUp && <span className={styles.reason}> Não foi possível reconectar.</span>}
         </p>
-      </header>
-
-      <HistoryNotice />
-      <div className={styles.workspace}>
-        <section className={styles.terminal} aria-describedby={HISTORY_NOTICE_ID}>
-          <Terminal
-            labId={lab.id}
-            session={session}
-            closeRequested={closeRequested}
-            onStatus={onStatus}
-            insertRef={insertRef}
-          />
-        </section>
-        <div className={styles.side}>
-          {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
-          <HistoryPanel labId={lab.id} live insertRef={insertRef} />
+      </TopBar>
+      <main className={styles.page}>
+        <h1 className="visually-hidden">Laboratório</h1>
+        <HistoryNotice />
+        <div className={styles.workspace}>
+          <section className={styles.terminal} aria-describedby={HISTORY_NOTICE_ID}>
+            <Terminal
+              labId={lab.id}
+              session={session}
+              closeRequested={closeRequested}
+              onStatus={onStatus}
+              insertRef={insertRef}
+            />
+          </section>
+          <div className={styles.side}>
+            {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
+            <HistoryPanel labId={lab.id} live insertRef={insertRef} />
+          </div>
         </div>
-      </div>
-      {confirming && lab.mission && (
-        <ConfirmReplace
-          title="Reiniciar o laboratório?"
-          confirmLabel="Descartar e reiniciar"
-          onCancel={() => setConfirming(false)}
-          onConfirm={() => {
-            setConfirming(false)
-            if (lab.mission) onReplace({ lab, missionSlug: lab.mission.slug })
-          }}
-        >
-          Os arquivos, os processos e todo o estado temporário deste laboratório serão
-          descartados. Um laboratório novo será criado para a mesma missão, na versão atual
-          dela.
-        </ConfirmReplace>
-      )}
-      <footer className={styles.actions}>
-        <span className={styles.expiry}>
-          Encerra automaticamente às {formatTime(lab.expires_at)}.
-        </span>
-        {end.error && (
-          <span className={styles.error} role="alert">
-            {end.error.message}
-          </span>
-        )}
-        {replaceError && (
-          <span className={styles.error} role="alert">
-            {checking ? 'Verificando o estado do laboratório…' : replaceError.message}
-          </span>
-        )}
-        {closed && !retry ? (
-          <button type="button" onClick={reconnectByHand}>
-            Reconectar
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setRetry(null)
-              setCloseRequested(true)
+        {confirming && lab.mission && (
+          <ConfirmReplace
+            title="Reiniciar o laboratório?"
+            confirmLabel="Descartar e reiniciar"
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => {
+              setConfirming(false)
+              if (lab.mission) onReplace({ lab, missionSlug: lab.mission.slug })
             }}
           >
-            Desconectar
-          </button>
+            Os arquivos, os processos e todo o estado temporário deste laboratório serão
+            descartados. Um laboratório novo será criado para a mesma missão, na versão atual
+            dela.
+          </ConfirmReplace>
         )}
-        {lab.mission && (
-          <button
-            type="button"
-            disabled={confirming || checking || end.isPending}
-            onClick={() => setConfirming(true)}
-          >
-            Reiniciar laboratório
+        <footer className={styles.actions}>
+          <span className={styles.expiry}>
+            Encerra automaticamente às {formatTime(lab.expires_at)}.
+          </span>
+          {end.error && (
+            <span className={styles.error} role="alert">
+              {end.error.message}
+            </span>
+          )}
+          {replaceError && (
+            <span className={styles.error} role="alert">
+              {checking ? 'Verificando o estado do laboratório…' : replaceError.message}
+            </span>
+          )}
+          {closed && !retry ? (
+            <button type="button" onClick={reconnectByHand}>
+              Reconectar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setRetry(null)
+                setCloseRequested(true)
+              }}
+            >
+              Desconectar
+            </button>
+          )}
+          {lab.mission && (
+            <button
+              type="button"
+              disabled={confirming || checking || end.isPending}
+              onClick={() => setConfirming(true)}
+            >
+              Reiniciar laboratório
+            </button>
+          )}
+          <button type="button" disabled={end.isPending} onClick={() => end.mutate(lab.id)}>
+            {end.isPending ? 'Encerrando…' : 'Encerrar laboratório'}
           </button>
-        )}
-        <button type="button" disabled={end.isPending} onClick={() => end.mutate(lab.id)}>
-          {end.isPending ? 'Encerrando…' : 'Encerrar laboratório'}
-        </button>
-      </footer>
-    </main>
+        </footer>
+      </main>
+    </div>
   )
 }
 
@@ -318,17 +318,18 @@ function ReadyLab({
 function Replacing({ replacement }: { replacement: Replacement }) {
   const reset = replacement.lab.mission?.slug === replacement.missionSlug
   return (
-    <main className={styles.ended}>
-      <h1 className={styles.title}>
-        <Link to="/">Linux Lab</Link>
-      </h1>
-      <MissionLine mission={replacement.lab.mission} />
-      <p role="status">{reset ? 'Reiniciando o laboratório…' : 'Trocando de missão…'}</p>
-      <p className={styles.muted}>
-        O laboratório anterior está sendo encerrado e um novo está sendo preparado. Isso pode
-        levar até dois minutos.
-      </p>
-    </main>
+    <>
+      <TopBar />
+      <main className={styles.ended}>
+        <h1 className={styles.title}>Laboratório</h1>
+        <MissionLine mission={replacement.lab.mission} />
+        <p role="status">{reset ? 'Reiniciando o laboratório…' : 'Trocando de missão…'}</p>
+        <p className={styles.muted}>
+          O laboratório anterior está sendo encerrado e um novo está sendo preparado. Isso pode
+          levar até dois minutos.
+        </p>
+      </main>
+    </>
   )
 }
 
@@ -371,67 +372,68 @@ function AfterReplacement({
   const reason = lab.end_reason ? endReasonMessage[lab.end_reason] : null
 
   return (
-    <main className={styles.ended}>
-      <h1 className={styles.title}>
-        <Link to="/">Linux Lab</Link>
-      </h1>
-      <MissionLine mission={lab.mission} />
-      <p role="status">
-        Laboratório: <strong data-lab-status={lab.status}>{statusLabel[lab.status]}</strong>
-      </p>
-      {reason && <p>{reason}</p>}
-      {error && (
-        <p className={styles.error} role="alert">
-          {replacementFailure(error)}
+    <>
+      <TopBar />
+      <main className={styles.ended}>
+        <h1 className={styles.title}>Laboratório</h1>
+        <MissionLine mission={lab.mission} />
+        <p role="status">
+          Laboratório: <strong data-lab-status={lab.status}>{statusLabel[lab.status]}</strong>
         </p>
-      )}
-      {current.isPending ? (
-        <p className={styles.muted}>Verificando o seu laboratório atual…</p>
-      ) : current.isError ? (
-        <p className={styles.error} role="alert">
-          {current.error.message}
-        </p>
-      ) : active && active.id !== lab.id ? (
-        <>
-          <p>{activeLabel[active.status] ?? 'Você tem um laboratório ativo.'}</p>
-          <Link to={`/labs/${active.id}`}>Abrir laboratório atual</Link>
-        </>
-      ) : active ? (
-        <>
-          <p>A remoção deste laboratório ainda não terminou.</p>
-          {error && missionSlug && (
-            <button className={styles.primary} type="button" onClick={onRetry}>
-              Tentar novamente
-            </button>
-          )}
-        </>
-      ) : (
-        missionSlug && (
+        {reason && <p>{reason}</p>}
+        {error && (
+          <p className={styles.error} role="alert">
+            {replacementFailure(error)}
+          </p>
+        )}
+        {current.isPending ? (
+          <p className={styles.muted}>Verificando o seu laboratório atual…</p>
+        ) : current.isError ? (
+          <p className={styles.error} role="alert">
+            {current.error.message}
+          </p>
+        ) : active && active.id !== lab.id ? (
           <>
-            <p>Você não tem um laboratório ativo.</p>
-            <button
-              className={styles.primary}
-              type="button"
-              disabled={create.isPending}
-              onClick={() =>
-                create.mutate(missionSlug, {
-                  onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
-                })
-              }
-            >
-              {create.isPending ? 'Preparando…' : 'Iniciar novo laboratório'}
-            </button>
+            <p>{activeLabel[active.status] ?? 'Você tem um laboratório ativo.'}</p>
+            <Link to={`/labs/${active.id}`}>Abrir laboratório atual</Link>
           </>
-        )
-      )}
-      {create.error && (
-        <p className={styles.error} role="alert">
-          {create.error.message}
-        </p>
-      )}
-      <HistoryPanel labId={lab.id} live={false} />
-      <Link to="/">Voltar ao início</Link>
-    </main>
+        ) : active ? (
+          <>
+            <p>A remoção deste laboratório ainda não terminou.</p>
+            {error && missionSlug && (
+              <button className={styles.primary} type="button" onClick={onRetry}>
+                Tentar novamente
+              </button>
+            )}
+          </>
+        ) : (
+          missionSlug && (
+            <>
+              <p>Você não tem um laboratório ativo.</p>
+              <button
+                className={styles.primary}
+                type="button"
+                disabled={create.isPending}
+                onClick={() =>
+                  create.mutate(missionSlug, {
+                    onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
+                  })
+                }
+              >
+                {create.isPending ? 'Preparando…' : 'Iniciar novo laboratório'}
+              </button>
+            </>
+          )
+        )}
+        {create.error && (
+          <p className={styles.error} role="alert">
+            {create.error.message}
+          </p>
+        )}
+        <HistoryPanel labId={lab.id} live={false} />
+        <Link to="/">Voltar ao início</Link>
+      </main>
+    </>
   )
 }
 
@@ -450,41 +452,42 @@ function EndedLab({ lab }: { lab: Lab }) {
   const mission = lab.mission
 
   return (
-    <main className={styles.ended}>
-      <h1 className={styles.title}>
-        <Link to="/">Linux Lab</Link>
-      </h1>
-      <MissionLine mission={mission} />
-      <p role="status">
-        Laboratório: <strong data-lab-status={lab.status}>{statusLabel[lab.status]}</strong>
-      </p>
-      {reason && (
-        <p className={lab.end_reason === 'oom' ? styles.error : undefined} role="alert">
-          {reason}
+    <>
+      <TopBar lab={lab} />
+      <main className={styles.ended}>
+        <h1 className={styles.title}>Laboratório</h1>
+        <MissionLine mission={mission} />
+        <p role="status">
+          Laboratório: <strong data-lab-status={lab.status}>{statusLabel[lab.status]}</strong>
         </p>
-      )}
-      {lab.status !== 'terminating' && mission && (
-        <button
-          className={styles.primary}
-          type="button"
-          disabled={create.isPending}
-          onClick={() =>
-            create.mutate(mission.slug, {
-              onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
-            })
-          }
-        >
-          {create.isPending ? 'Preparando…' : 'Iniciar novo laboratório'}
-        </button>
-      )}
-      {create.error && (
-        <p className={styles.error} role="alert">
-          {create.error.message}
-        </p>
-      )}
-      <HistoryPanel labId={lab.id} live={false} />
-      <Link to="/">Voltar ao início</Link>
-    </main>
+        {reason && (
+          <p className={lab.end_reason === 'oom' ? styles.error : undefined} role="alert">
+            {reason}
+          </p>
+        )}
+        {lab.status !== 'terminating' && mission && (
+          <button
+            className={styles.primary}
+            type="button"
+            disabled={create.isPending}
+            onClick={() =>
+              create.mutate(mission.slug, {
+                onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
+              })
+            }
+          >
+            {create.isPending ? 'Preparando…' : 'Iniciar novo laboratório'}
+          </button>
+        )}
+        {create.error && (
+          <p className={styles.error} role="alert">
+            {create.error.message}
+          </p>
+        )}
+        <HistoryPanel labId={lab.id} live={false} />
+        <Link to="/">Voltar ao início</Link>
+      </main>
+    </>
   )
 }
 
@@ -492,29 +495,34 @@ function Message({
   text,
   alert,
   retry,
-  mission = null,
+  lab,
+  pending = false,
 }: {
   text: string
   alert?: boolean
   retry?: () => void
-  mission?: LabMission | null
+  // The lab the message is about, once it is known.
+  lab?: Lab
+  // The lab is still being read.
+  pending?: boolean
 }) {
   return (
-    <main className={styles.ended}>
-      <h1 className={styles.title}>
-        <Link to="/">Linux Lab</Link>
-      </h1>
-      <MissionLine mission={mission} />
-      <p className={alert ? styles.error : styles.muted} role={alert ? 'alert' : 'status'}>
-        {text}
-      </p>
-      {retry && (
-        <button className={styles.primary} type="button" onClick={retry}>
-          Tentar novamente
-        </button>
-      )}
-      <Link to="/">Voltar ao início</Link>
-    </main>
+    <>
+      <TopBar lab={lab} pending={pending} />
+      <main className={styles.ended}>
+        <h1 className={styles.title}>Laboratório</h1>
+        <MissionLine mission={lab?.mission ?? null} />
+        <p className={alert ? styles.error : styles.muted} role={alert ? 'alert' : 'status'}>
+          {text}
+        </p>
+        {retry && (
+          <button className={styles.primary} type="button" onClick={retry}>
+            Tentar novamente
+          </button>
+        )}
+        <Link to="/">Voltar ao início</Link>
+      </main>
+    </>
   )
 }
 

@@ -1,6 +1,7 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { Banner } from '../Banner.tsx'
+import { TopBar } from '../TopBar.tsx'
 import type { SignupInput } from './api.ts'
 import styles from './Auth.module.css'
 import { useAuth, useSignup } from './session.ts'
@@ -32,73 +33,76 @@ export function SignupPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <Banner />
-      <form className={styles.form} onSubmit={submit} aria-labelledby="signup-heading">
-        <h2 id="signup-heading" className={styles.heading}>
-          Criar conta
-        </h2>
-        <label className={styles.field}>
-          Nome
-          <input
-            name="display_name"
-            autoComplete="name"
-            required
-            maxLength={MAX_DISPLAY_NAME_LENGTH}
-            value={form.display_name}
-            onChange={update('display_name')}
-          />
-        </label>
-        <label className={styles.field}>
-          Email
-          <input
-            type="email"
-            name="email"
-            autoComplete="email"
-            required
-            value={form.email}
-            onChange={update('email')}
-          />
-        </label>
-        <label className={styles.field}>
-          Senha
-          <input
-            type="password"
-            name="password"
-            autoComplete="new-password"
-            required
-            minLength={MIN_PASSWORD_LENGTH}
-            maxLength={MAX_PASSWORD_LENGTH}
-            aria-describedby="password-hint"
-            value={form.password}
-            onChange={update('password')}
-          />
-          <span id="password-hint" className={styles.hint}>
-            De {MIN_PASSWORD_LENGTH} a {MAX_PASSWORD_LENGTH} caracteres.
-          </span>
-        </label>
-        <label className={styles.field}>
-          Código de convite
-          <input
-            name="invite_code"
-            autoComplete="off"
-            required
-            value={form.invite_code}
-            onChange={update('invite_code')}
-          />
-        </label>
-        {signup.error && (
-          <p className={styles.error} role="alert">
-            {signup.error.message}
-          </p>
-        )}
-        <button className={styles.button} type="submit" disabled={signup.isPending}>
-          {signup.isPending ? 'Criando conta…' : 'Criar conta'}
-        </button>
-      </form>
-      <p className={styles.muted}>
-        Já tem conta? <Link to="/login">Entrar</Link>
-      </p>
-    </main>
+    <>
+      <TopBar />
+      <main className={styles.page}>
+        <Banner />
+        <form className={styles.form} onSubmit={submit} aria-labelledby="signup-heading">
+          <h2 id="signup-heading" className={styles.heading}>
+            Criar conta
+          </h2>
+          <label className={styles.field}>
+            Nome
+            <input
+              name="display_name"
+              autoComplete="name"
+              required
+              maxLength={MAX_DISPLAY_NAME_LENGTH}
+              value={form.display_name}
+              onChange={update('display_name')}
+            />
+          </label>
+          <label className={styles.field}>
+            Email
+            <input
+              type="email"
+              name="email"
+              autoComplete="email"
+              required
+              value={form.email}
+              onChange={update('email')}
+            />
+          </label>
+          <label className={styles.field}>
+            Senha
+            <input
+              type="password"
+              name="password"
+              autoComplete="new-password"
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              maxLength={MAX_PASSWORD_LENGTH}
+              aria-describedby="password-hint"
+              value={form.password}
+              onChange={update('password')}
+            />
+            <span id="password-hint" className={styles.hint}>
+              De {MIN_PASSWORD_LENGTH} a {MAX_PASSWORD_LENGTH} caracteres.
+            </span>
+          </label>
+          <label className={styles.field}>
+            Código de convite
+            <input
+              name="invite_code"
+              autoComplete="off"
+              required
+              value={form.invite_code}
+              onChange={update('invite_code')}
+            />
+          </label>
+          {signup.error && (
+            <p className={styles.error} role="alert">
+              {signup.error.message}
+            </p>
+          )}
+          <button className={styles.button} type="submit" disabled={signup.isPending}>
+            {signup.isPending ? 'Criando conta…' : 'Criar conta'}
+          </button>
+        </form>
+        <p className={styles.muted}>
+          Já tem conta? <Link to="/login">Entrar</Link>
+        </p>
+      </main>
+    </>
   )
 }

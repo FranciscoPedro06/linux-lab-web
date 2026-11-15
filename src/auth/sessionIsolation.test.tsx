@@ -129,7 +129,9 @@ describe('late responses of operations started by the previous user', () => {
 
     expect(client.getQueryData(['catalog', 'modules'])).toEqual(before.modules)
     expect(client.getQueryData(['catalog', 'mission', 'sample-file'])).toEqual(before.detail)
-    expect(screen.getByRole('banner').textContent).not.toContain('Concluída')
+    // The mission's own header, below the top bar.
+    const title = screen.getByRole('heading', { level: 1, name: 'Arquivo de teste' })
+    expect(title.closest('header')?.textContent).not.toContain('Concluída')
     expect(screen.queryByText(/Missão concluída/)).toBeNull()
   })
 

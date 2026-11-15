@@ -1,0 +1,102 @@
+/* The top bar: one line on bg-alt, edge to edge, like a TUI's title line. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 2ch;
+  margin: 0;
+  padding: 0 2ch;
+  background: var(--bg-alt);
+}
+
+.bar p {
+  margin-block: 0;
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--bright);
+  text-decoration: none;
+}
+
+.user {
+  color: var(--fg);
+}
+
+/* The page's own segments: they take the free space, so the lab's state sits right. */
+.page {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 2ch;
+  min-width: 0;
+}
+
+.end {
+  display: flex;
+  gap: 0 2ch;
+  margin-left: auto;
+}
+
+.page + .end {
+  margin-left: 0;
+}
+
+.end a {
+  color: var(--fg);
+}
+
+.end a:hover {
+  color: var(--bright);
+}
+
+.end a[aria-current='page'] {
+  font-weight: 700;
+  color: var(--bright);
+  text-decoration: none;
+}
+
+.end a:focus-visible {
+  color: var(--bg);
+}
+
+.lab {
+  text-decoration: none;
+}
+
+/* The state in capitals, in the color it already has in a terminal, always as a word. */
+[data-lab-state] {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+[data-lab-state='ready'] {
+  color: var(--green);
+}
+
+[data-lab-state='provisioning'],
+[data-lab-state='terminating'] {
+  color: var(--yellow);
+}
+
+.lab:focus-visible [data-lab-state],
+.lab:focus-visible .dim {
+  color: inherit;
+}
+
+.none {
+  font-weight: 700;
+  color: var(--bright);
+  text-transform: uppercase;
+}
+
+.dim {
+  color: var(--dim);
+}
+
+.error::before {
+  content: 'erro: ';
+  color: var(--red);
+  font-weight: 700;
+}
