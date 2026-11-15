@@ -55,7 +55,7 @@ Ubuntu Sans Mono 400 and 700 from `@fontsource/ubuntu-sans-mono`, bundled with t
 | `[x]` / `[ ]` listing | catalog | `src/catalog/Catalog.module.css` (`data-progress`) |
 | manual page (NAME-style sections, 7-column bodies) | mission | `src/catalog/MissionPage.module.css` |
 | `history` output (number right-aligned) | command history | `src/lab/HistoryPanel.module.css` (`data-seq`) |
-| status in brackets, like a boot log | validation | `src/lab/ValidationPanel.module.css` |
+| status in brackets, like a boot log; after the sentence, `2 de 3 critérios atendidos.` in `--dim` (leaf checks only) | validation | `src/lab/ValidationPanel.module.css`, `src/lab/criteria.ts` |
 | double-line box, `[ Cancelar ]` first and focused, the focus back on the button that opened it after cancelling | confirmation | `src/lab/ConfirmReplace.tsx`, `ConfirmReplace.module.css` |
 | `\| / - \` turning before the label of a button whose request runs (`aria-busy`), still under `prefers-reduced-motion: reduce` | busy buttons | `button[aria-busy='true']::before` in `src/index.css` |
 | `# comment` | notices, field hints | `.notice`, `.hint` |
@@ -87,13 +87,6 @@ In the catalog, `[x]` is done and `[ ]` is not; the design adds `[~]` in `--yell
 
 - **Waits for:** nothing; the data is already there.
 - **How:** in `src/catalog/Catalog.tsx`, read `useCurrentLab()` and give the mission's `<li>` a `data-active` attribute when `lab.mission.slug` matches. Add `.missions li[data-active]::before { content: '[~]'; color: var(--yellow) }` in `Catalog.module.css`, and say "laboratório aberto" in text for screen readers.
-
-### Counted result after a validation
-
-The design shows "Missão ainda não concluída. 2 de 3 critérios atendidos." instead of only "Veja os critérios abaixo."
-
-- **Waits for:** a decision on how to count groups (`all`, `any`, `not`): count leaf checks, or only the top level.
-- **How:** in `Outcome` (`src/lab/ValidationPanel.tsx`), walk `run.result` and count `check` nodes with `status === 'passed'`, then add the count in `--dim` after the sentence.
 
 ### Small screens: say it instead of squeezing bash
 
