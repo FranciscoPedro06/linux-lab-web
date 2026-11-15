@@ -28,7 +28,7 @@ import {
   useLab,
   useReplaceLab,
 } from './queries.ts'
-import { ValidationPanel } from './ValidationPanel.tsx'
+import { type Announce, ValidationPanel } from './ValidationPanel.tsx'
 
 const stateLabel: Record<ConnectionStatus['state'], string> = {
   connecting: 'Conectando',
@@ -124,6 +124,9 @@ type Retry = { attempt: number; delay: number }
 // The three stay mounted whatever is shown, so switching never closes the terminal.
 type View = 'terminal' | 'criteria' | 'history'
 
+// The width below which one area is shown at a time; the same as in LabPage.module.css.
+const ONE_AREA_QUERY = '(max-width: 40rem)'
+
 const viewLabel: Record<View, string> = {
   terminal: 'Terminal',
   criteria: 'Critérios',
@@ -155,6 +158,21 @@ function ReadyLab({
   const insertRef = useRef<Insert | null>(null)
   const [view, setView] = useState<View>('terminal')
   const viewIds = { terminal: useId(), criteria: useId(), history: useId() }
+  // A finished validation is announced by the page while the validation panel is hidden
+  // (a phone, another area shown): the panel's own live region is then out of the
+  // accessibility tree. Each announcement replaces the text node, so the same result
+  // twice is still read. The area shown and the focus do not change.
+  const shownView = useRef<View>(view)
+  useEffect(() => {
+    shownView.current = view
+  }, [view])
+  const [announcement, setAnnouncement] = useState<{ id: number; text: string } | null>(null)
+  const announce = useCallback<Announce>((text) => {
+    const oneArea = typeof window.matchMedia === 'function' && window.matchMedia(ONE_AREA_QUERY).matches
+    if (!oneArea || shownView.current === 'criteria') return false
+    setAnnouncement((previous) => ({ id: (previous?.id ?? 0) + 1, text }))
+    return true
+  }, [])
   // What the history panel calls: bash is shown first, so the inserted text is seen and
   // the terminal can take the focus; if nothing was inserted, the panel comes back with
   // its message.
@@ -261,6 +279,11 @@ function ReadyLab({
       <main className={styles.page}>
         <h1 className="visually-hidden">Laboratório</h1>
         <HistoryNotice />
+        {/* A polite live region, without the status role: the connection is the page's
+            status. */}
+        <p className="visually-hidden" aria-live="polite" aria-atomic="true">
+          {announcement && <span key={announcement.id}>{announcement.text}</span>}
+        </p>
         <div className={styles.views} role="group" aria-label="Área do laboratório">
           {(Object.keys(viewLabel) as View[])
             .filter((name) => name !== 'criteria' || lab.mission)
@@ -293,7 +316,7 @@ function ReadyLab({
           <div className={styles.side}>
             {lab.mission && (
               <div id={viewIds.criteria} className={styles.criteria}>
-                <ValidationPanel labId={lab.id} mission={lab.mission} />
+                <ValidationPanel labId={lab.id} mission={lab.mission} announce={announce} />
               </div>
             )}
             <div id={viewIds.history} className={styles.history}>

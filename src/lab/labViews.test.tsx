@@ -2,9 +2,10 @@
 // The lab page's areas on a phone: one shown at a time, bash first, and switching never
 // mounts the terminal again. The layout itself is CSS (LabPage.module.css), read here as
 // text; a browser checks how it renders.
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ana, api, lab, labId, missionDetail, renderAt } from '../testSupport.tsx'
+import { ana, api, apiError, lab, labId, missionDetail, renderAt } from '../testSupport.tsx'
+import type { ResultNode, ValidationRun } from './api.ts'
 import labPageCss from './LabPage.module.css?raw'
 import validationCss from './ValidationPanel.module.css?raw'
 
@@ -37,7 +38,12 @@ vi.mock('../terminal/Terminal.tsx', async () => {
           terminal.unmounts += 1
         }
       }, [props.insertRef])
-      return <div data-testid="terminal">{props.labId}</div>
+      return (
+        <div data-testid="terminal">
+          {props.labId}
+          <textarea aria-label="Terminal input" />
+        </div>
+      )
     },
   }
 })
@@ -192,6 +198,225 @@ describe('the lab areas', () => {
 
     expect(pressed()).toEqual(['Histórico'])
     expect(await screen.findByText('O terminal não está conectado.')).toBeTruthy()
+  })
+})
+
+// Screen width as the browser reports it: below 40rem the lab shows one area at a time.
+function screenIs(width: 'phone' | 'wide') {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: width === 'phone' && query === '(max-width: 40rem)',
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }))
+}
+
+// The page's own live region, outside the areas that are hidden on a phone.
+function announcer(): HTMLElement {
+  const element = document.querySelector('main > [aria-live="polite"][aria-atomic="true"]')
+  if (!(element instanceof HTMLElement)) throw new Error('no announcer')
+  return element
+}
+
+function validationRun(result: ResultNode | null, overrides: Partial<ValidationRun> = {}) {
+  return {
+    run_id: 1,
+    outcome: result?.status ?? 'error',
+    newly_completed: false,
+    mission: { slug: 'sample-file', version: 1 },
+    progress: { status: 'not_completed', completed_version: null, completed_at: null },
+    result,
+    ...overrides,
+  }
+}
+
+const twoOfThree: ResultNode = {
+  kind: 'all',
+  status: 'failed',
+  message: null,
+  children: [
+    { kind: 'check', id: 'a', status: 'passed', message: 'A.' },
+    { kind: 'check', id: 'b', status: 'failed', message: 'B.' },
+    { kind: 'check', id: 'c', status: 'passed', message: 'C.' },
+  ],
+}
+
+function pending() {
+  let release!: (response: Response) => void
+  const promise = new Promise<Response>((resolve) => {
+    release = resolve
+  })
+  return {
+    route: () => promise,
+    release: (response: Response) => act(async () => release(response)),
+  }
+}
+
+describe('announcing a finished validation', () => {
+  const validatePath = `POST /api/labs/${labId}/validate`
+
+  // On a phone: Verificar is pressed on Critérios, then the student goes back to bash,
+  // types there, and the run finishes while Terminal is shown.
+  async function finishOnTerminal(response: Response) {
+    const run = pending()
+    api.routes[validatePath] = run.route
+    renderAt(`/labs/${labId}`)
+    await screen.findByTestId('terminal')
+    fireEvent.click(within(views()).getByRole('button', { name: 'Critérios' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Verificar' }))
+    await screen.findByRole('button', { name: 'Verificando…' })
+    fireEvent.click(within(views()).getByRole('button', { name: 'Terminal' }))
+    const input = screen.getByRole('textbox', { name: 'Terminal input' })
+    input.focus()
+    // Nothing is said while the run is in progress.
+    expect(announcer().textContent).toBe('')
+    await run.release(response)
+    await waitFor(() => expect(announcer().textContent).not.toBe(''))
+    // The area shown and the focus stay where the student left them.
+    expect(pressed()).toEqual(['Terminal'])
+    expect(document.activeElement).toBe(input)
+    return announcer().textContent
+  }
+
+  beforeEach(() => screenIs('phone'))
+
+  it('says nothing when the page opens', async () => {
+    renderAt(`/labs/${labId}`)
+    await screen.findByTestId('terminal')
+
+    expect(announcer().textContent).toBe('')
+  })
+
+  it('announces a passed run, with its count, while Terminal is shown', async () => {
+    const passed: ResultNode = {
+      kind: 'all',
+      status: 'passed',
+      message: null,
+      children: [
+        { kind: 'check', id: 'a', status: 'passed', message: 'A.' },
+        { kind: 'check', id: 'b', status: 'passed', message: 'B.' },
+      ],
+    }
+    const text = await finishOnTerminal(
+      Response.json(
+        validationRun(passed, {
+          newly_completed: true,
+          progress: { status: 'completed', completed_version: 1, completed_at: 'x' },
+        }),
+      ),
+    )
+    expect(text).toBe(
+      'Missão concluída: o laboratório atende a todos os critérios. 2 de 2 critérios atendidos.',
+    )
+  })
+
+  it('announces a failed run with its count', async () => {
+    const text = await finishOnTerminal(Response.json(validationRun(twoOfThree)))
+    expect(text).toBe('Missão ainda não concluída. 2 de 3 critérios atendidos.')
+  })
+
+  it('announces a run that could not check the lab', async () => {
+    const result: ResultNode = {
+      kind: 'all',
+      status: 'error',
+      message: null,
+      children: [
+        { kind: 'check', id: 'a', status: 'passed', message: 'A.' },
+        { kind: 'check', id: 'b', status: 'error', message: 'B.' },
+      ],
+    }
+    const text = await finishOnTerminal(Response.json(validationRun(result)))
+    expect(text).toBe(
+      'Não foi possível verificar o laboratório agora. Isso não conta como tentativa. 1 de 2 critérios atendidos (1 não verificado).',
+    )
+  })
+
+  it('announces a refused request', async () => {
+    const refused = apiError(429, 'rate_limited', 'Muitas verificações em pouco tempo.')
+    const text = await finishOnTerminal(await refused(undefined))
+    expect(text).toBe('Erro: Muitas verificações em pouco tempo.')
+  })
+
+  it('announces once: re-renders and opening Critérios do not announce it again', async () => {
+    await finishOnTerminal(Response.json(validationRun(twoOfThree)))
+    const said = announcer().firstElementChild
+
+    for (const name of ['Histórico', 'Terminal', 'Critérios']) {
+      fireEvent.click(within(views()).getByRole('button', { name }))
+    }
+
+    // The same text node: nothing new for a screen reader to read.
+    expect(announcer().firstElementChild).toBe(said)
+    // Critérios shows the whole result, without a live region of its own for this run.
+    const panel = screen.getByRole('region', { name: 'Verificação' })
+    expect(panel.textContent).toContain('Missão ainda não concluída. 2 de 3 critérios atendidos.')
+    expect(within(panel).queryByRole('status')).toBeNull()
+    expect(within(panel).queryByRole('alert')).toBeNull()
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(3)
+  })
+
+  it('announces each new run, even with the same result', async () => {
+    api.routes[validatePath] = () => Response.json(validationRun(twoOfThree))
+    renderAt(`/labs/${labId}`)
+    await screen.findByTestId('terminal')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Verificar' }))
+    await waitFor(() => expect(announcer().textContent).not.toBe(''))
+    const first = announcer().firstElementChild
+    fireEvent.click(await screen.findByRole('button', { name: 'Verificar' }))
+    await waitFor(() => expect(announcer().firstElementChild).not.toBe(first))
+
+    expect(announcer().textContent).toBe('Missão ainda não concluída. 2 de 3 critérios atendidos.')
+    expect(api.calls('POST', `/api/labs/${labId}/validate`)).toBe(2)
+  })
+
+  it('leaves the announcement to the panel while Critérios is shown', async () => {
+    api.routes[validatePath] = () => Response.json(validationRun(twoOfThree))
+    renderAt(`/labs/${labId}`)
+    await screen.findByTestId('terminal')
+    fireEvent.click(within(views()).getByRole('button', { name: 'Critérios' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Verificar' }))
+
+    const panel = screen.getByRole('region', { name: 'Verificação' })
+    await waitFor(() =>
+      expect(within(panel).getByRole('status').textContent).toBe(
+        'Missão ainda não concluída. 2 de 3 critérios atendidos.',
+      ),
+    )
+    expect(announcer().textContent).toBe('')
+  })
+
+  it('leaves the announcement to the panel where every area is shown', async () => {
+    screenIs('wide')
+    api.routes[validatePath] = () => Response.json(validationRun(twoOfThree))
+    renderAt(`/labs/${labId}`)
+    await screen.findByTestId('terminal')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Verificar' }))
+
+    const panel = screen.getByRole('region', { name: 'Verificação' })
+    await waitFor(() => expect(within(panel).getByRole('status')).toBeTruthy())
+    expect(announcer().textContent).toBe('')
+  })
+})
+
+describe('the switcher names', () => {
+  it('names the buttons by their area only, and says which is shown', async () => {
+    renderAt(`/labs/${labId}`)
+    await screen.findByTestId('terminal')
+
+    for (const name of ['Terminal', 'Critérios', 'Histórico']) {
+      expect(
+        within(views()).getByRole('button', { name, pressed: name === 'Terminal' }),
+      ).toBeTruthy()
+    }
+  })
+
+  it('draws the brackets with empty alternative text, so names do not include them', () => {
+    const phone = labPageCss.slice(labPageCss.indexOf('@media (max-width: 40rem)'))
+    expect(phone).toMatch(/\.views button::before \{\s*content: '\[';\s*content: '\[' \/ '';/)
+    expect(phone).toMatch(/\.views button::after \{\s*content: '\]';\s*content: '\]' \/ '';/)
   })
 })
 

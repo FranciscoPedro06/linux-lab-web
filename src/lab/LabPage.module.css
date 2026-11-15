@@ -153,13 +153,16 @@
     min-height: 44px;
   }
 
-  /* [Terminal] [Critérios] [Histórico]: tight brackets, so the line fits 320px. */
+  /* [Terminal] [Critérios] [Histórico]: tight brackets, so the line fits 320px. They
+     are drawn only: empty alternative text keeps them out of the buttons' names. */
   .views button::before {
     content: '[';
+    content: '[' / '';
   }
 
   .views button::after {
     content: ']';
+    content: ']' / '';
   }
 
   .views button[aria-pressed='true'] {
