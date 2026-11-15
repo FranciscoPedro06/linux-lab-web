@@ -8,6 +8,7 @@ import {
   type ValidationRun,
   type ValidationStatus,
 } from './api.ts'
+import { countCriteria, criteriaText } from './criteria.ts'
 import styles from './ValidationPanel.module.css'
 import { useValidateLab } from './queries.ts'
 
@@ -98,34 +99,50 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
 
 // A passed run is a new completion only when the API says this run recorded it; a
 // completion recorded earlier stays whatever later runs return.
+//
+// The count of met criteria (lab/criteria.ts) comes from this run's own result, after
+// the sentence and in the same status, so it is read with it.
 function Outcome({ run, retry }: { run: ValidationRun; retry: () => void }) {
   const completedBefore = !run.newly_completed && run.progress.status === 'completed'
+  const count = run.result ? countCriteria(run.result) : null
+  const counted = count && (
+    <>
+      {' '}
+      <span className={styles.count}>{criteriaText(count)}</span>
+    </>
+  )
   return (
     <div className={styles.outcome} data-outcome={run.outcome}>
       {run.outcome === 'passed' && run.newly_completed && (
         <p className={styles.passed} role="status">
-          Missão concluída: o laboratório atende a todos os critérios.
+          Missão concluída: o laboratório atende a todos os critérios.{counted}
         </p>
       )}
       {run.outcome === 'passed' && !run.newly_completed && (
         <p className={styles.passed} role="status">
-          O laboratório atende a todos os critérios.{' '}
-          {completedBefore && 'Esta missão já estava concluída.'}
+          O laboratório atende a todos os critérios.
+          {completedBefore && ' Esta missão já estava concluída.'}
+          {counted}
         </p>
       )}
       {run.outcome === 'failed' && !completedBefore && (
-        <p role="status">Missão ainda não concluída. Veja os critérios abaixo.</p>
+        <p role="status">
+          {count
+            ? 'Missão ainda não concluída.'
+            : 'Missão ainda não concluída. Veja os critérios abaixo.'}
+          {counted}
+        </p>
       )}
       {run.outcome === 'failed' && completedBefore && (
         <p role="status">
           O laboratório não atende a todos os critérios agora. Sua conclusão desta missão continua
-          registrada.
+          registrada.{counted}
         </p>
       )}
       {run.outcome === 'error' && (
         <>
           <p className={styles.error} role="alert">
-            Não foi possível verificar o laboratório agora. Isso não conta como tentativa.
+            Não foi possível verificar o laboratório agora. Isso não conta como tentativa.{counted}
           </p>
           <button type="button" onClick={retry}>
             Tentar novamente

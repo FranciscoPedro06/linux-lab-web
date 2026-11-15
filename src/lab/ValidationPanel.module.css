@@ -56,6 +56,12 @@
   color: var(--fg);
 }
 
+/* How many criteria were met: metadata after the sentence, in plain dim text. */
+.count {
+  font-weight: 400;
+  color: var(--dim);
+}
+
 .error::before {
   content: 'erro: ';
   color: var(--red);
