@@ -37,10 +37,13 @@ export function HistoryPanel({
   labId,
   live,
   insertRef,
+  shortcut,
 }: {
   labId: string
   live: boolean
   insertRef?: RefObject<Insert | null>
+  // A key combination that takes the focus to this panel (aria-keyshortcuts syntax).
+  shortcut?: string
 }) {
   const [requested, setRequested] = useState(live)
   const history = useLabHistory(labId, { live, enabled: requested })
@@ -144,7 +147,12 @@ export function HistoryPanel({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="history-heading">
+    <section
+      className={styles.panel}
+      aria-labelledby="history-heading"
+      aria-keyshortcuts={shortcut}
+      tabIndex={shortcut ? -1 : undefined}
+    >
       <h2 id="history-heading" className={styles.heading}>
         Histórico de comandos
       </h2>

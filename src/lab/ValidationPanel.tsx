@@ -30,10 +30,13 @@ export function ValidationPanel({
   labId,
   mission,
   announce,
+  shortcut,
 }: {
   labId: string
   mission: LabMission
   announce?: Announce
+  // A key combination that takes the focus to this panel (aria-keyshortcuts syntax).
+  shortcut?: string
 }) {
   const validate = useValidateLab(labId, mission.slug)
   // The mission detail, read at the lab's version, says whether an answer is expected.
@@ -60,7 +63,12 @@ export function ValidationPanel({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="validation-heading">
+    <section
+      className={styles.panel}
+      aria-labelledby="validation-heading"
+      aria-keyshortcuts={shortcut}
+      tabIndex={shortcut ? -1 : undefined}
+    >
       <h2 id="validation-heading" className={styles.heading}>
         Verificação
       </h2>

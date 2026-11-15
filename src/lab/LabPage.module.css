@@ -116,6 +116,50 @@
   overflow-wrap: anywhere;
 }
 
+/* The criteria and history wrappers hold their shortcut's label (below). */
+.criteria,
+.history {
+  position: relative;
+}
+
+/*
+ * The area shortcuts (lab/shortcuts.ts), drawn on the right of each panel's top border,
+ * from the label the page puts in data-shortcut, so they always match the keys handled.
+ * Drawn only: the panels carry aria-keyshortcuts for screen readers. Shown where a
+ * keyboard and a pointer are likely, and not on a phone, where the switcher is used.
+ */
+@media (min-width: 40.01rem) and (hover: hover) and (pointer: fine) {
+  .terminal::after,
+  .criteria::before,
+  .history::before {
+    position: absolute;
+    right: 1ch;
+    padding: 0 1ch;
+    background: var(--bg);
+    content: attr(data-shortcut);
+    content: attr(data-shortcut) / '';
+    color: var(--dim);
+  }
+
+  .terminal::after {
+    top: -11px;
+  }
+
+  /* The panel inside starts 10px down; its border title sits 11px above that. */
+  .criteria::before,
+  .history::before {
+    top: -1px;
+    z-index: 1;
+  }
+}
+
+/* A panel reached with its shortcut: its border becomes the active one, like bash's. */
+.criteria > section:focus-visible,
+.history > section:focus-visible {
+  outline: none;
+  border-color: var(--fg);
+}
+
 /* The phone's area switcher: hidden where every area fits. */
 .views {
   display: none;
