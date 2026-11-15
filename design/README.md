@@ -61,12 +61,63 @@ Ubuntu Sans Mono 400 and 700 from `@fontsource/ubuntu-sans-mono`, bundled with t
 | `[+]` / `[-]` | hints | `summary` in `src/index.css` |
 | `label: value` login prompt | login, sign-up | `.field` in `src/auth/Auth.module.css` |
 
-Not built yet, on purpose: a key bar of shortcuts. It belongs on a screen only once the screen handles those keys, and never single letters (they fire while typing and fight screen readers); `Tab`, `Enter` and `Esc` first.
-
 ## Small screens
 
-The lab wants 80 columns. Below 64rem the side column moves under bash, and bash keeps a fixed height. On a phone the terminal needs a bigger screen and a keyboard; say so rather than squeeze bash.
+The lab wants 80 columns. Below 64rem the side column moves under bash, and bash keeps a fixed height. What a phone should get is in the last item below.
 
 ## Motion
 
 Only what a terminal does. The cursor blinks in xterm.js; nothing else moves.
+
+## Not built yet, and how to build it
+
+The design system has these; the app does not yet. Each one waits for something, said below. Until then, leave it out rather than fake it.
+
+### Key bar (shortcuts footer)
+
+A last line on `--bg-alt` with each key in inverse video and its action beside it: `Enter entrar   Tab próximo campo`.
+
+- **Waits for:** the screen actually handling those keys. A bar that lists keys that do nothing is a lie.
+- **How:** first make the keys work, then show them. Prefer keys the browser already handles (`Tab`, `Enter` on a focused link or the form) and add `Esc` to go back (a `keydown` listener on `document` in the page, ignored while focus is in an `input`, a `textarea` or the terminal). Never single letters such as `q` or `t`: they fire while typing and fight screen readers. Then add a `KeyBar` component (`<ul aria-label="Atalhos de teclado">` with `<kbd>` per key) at the bottom of login, sign-up, home and the mission page. Never on the lab page: there the keyboard belongs to bash.
+
+### Top bar on every screen
+
+Today only the lab has the one-line bar on `--bg-alt`. The design puts it at the top of every screen: `linuxlab` in bold on the left, the user's name, and on the right the current lab's state (`lab pronto · 1h 42min`) or `sem laboratório ativo`.
+
+- **Waits for:** nothing; it is layout work.
+- **How:** move the lab's `.header` into a shared `TopBar` component that takes left and right segments, read the current lab with `useCurrentLab` for the right side, and render it first in each page's `<main>`. Keep one bar per screen.
+
+### Busy spinner on buttons
+
+While a request runs, the button shows `| / - \` turning before its label (`| Verificando…`).
+
+- **Waits for:** nothing.
+- **How:** set `aria-busy="true"` (besides `disabled`) on buttons whose request is pending, and in `src/index.css` animate `button[aria-busy='true']::before` with a `steps(1)` keyframe that changes `content` through `'[ | '`, `'[ / '`, `'[ - '`, `'[ \\ '`. Stop it under `prefers-reduced-motion: reduce`.
+
+### `[~]` for the mission whose lab is open
+
+In the catalog, `[x]` is done and `[ ]` is not; the design adds `[~]` in `--yellow` for the mission the student's active lab belongs to.
+
+- **Waits for:** nothing; the data is already there.
+- **How:** in `src/catalog/Catalog.tsx`, read `useCurrentLab()` and give the mission's `<li>` a `data-active` attribute when `lab.mission.slug` matches. Add `.missions li[data-active]::before { content: '[~]'; color: var(--yellow) }` in `Catalog.module.css`, and say "laboratório aberto" in text for screen readers.
+
+### Counted result after a validation
+
+The design shows "Missão ainda não concluída. 2 de 3 critérios atendidos." instead of only "Veja os critérios abaixo."
+
+- **Waits for:** a decision on how to count groups (`all`, `any`, `not`): count leaf checks, or only the top level.
+- **How:** in `Outcome` (`src/lab/ValidationPanel.tsx`), walk `run.result` and count `check` nodes with `status === 'passed'`, then add the count in `--dim` after the sentence.
+
+### Cancel first in the confirmation
+
+The design puts `[ Cancelar ]` before the danger action. Today Cancelar already has the focus but comes second.
+
+- **Waits for:** nothing.
+- **How:** swap the two buttons in `src/lab/ConfirmReplace.tsx`, keeping `autoFocus` on Cancelar, and update any test that relies on their order.
+
+### Small screens: say it instead of squeezing bash
+
+Below 64rem the side column already moves under bash. On a phone the design wants the lab page to say the terminal needs a bigger screen and a keyboard.
+
+- **Waits for:** a decision on the width (about 40rem) and on whether to still allow opening the terminal there.
+- **How:** in `src/lab/LabPage.module.css`, under that width hide the workspace and show a `.small` notice from `LabPage.tsx`: "O terminal precisa de uma tela maior e de um teclado. Abra este laboratório no computador." Keep the validation and history panels reachable.
