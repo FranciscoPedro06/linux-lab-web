@@ -18,9 +18,23 @@ const statusLabel: Record<ValidationStatus, string> = {
   error: 'Não verificada',
 }
 
+// Called with what a finished validation says, when it finishes. It returns true when the
+// page announced it itself because this panel is hidden (the lab page on a phone): the
+// panel then shows that result without a live region, so opening it later does not
+// announce it again.
+export type Announce = (text: string) => boolean
+
 // Checks the lab's state when the student asks. The API decides the outcome from the
 // mission version the lab was created for; nothing is validated automatically.
-export function ValidationPanel({ labId, mission }: { labId: string; mission: LabMission }) {
+export function ValidationPanel({
+  labId,
+  mission,
+  announce,
+}: {
+  labId: string
+  mission: LabMission
+  announce?: Announce
+}) {
   const validate = useValidateLab(labId, mission.slug)
   // The mission detail, read at the lab's version, says whether an answer is expected.
   // While it loads, or if it cannot be read, the panel validates without one.
@@ -28,11 +42,17 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
   const requiresAnswer = detail.data?.requires_answer === true
   const [answer, setAnswer] = useState('')
   const tooLong = answerBytes(answer) > MAX_ANSWER_BYTES
+  // Whether the page announced the result shown, so the panel does not announce it.
+  const [announcedElsewhere, setAnnouncedElsewhere] = useState(false)
+  const live = !announcedElsewhere
 
   const run = () => {
     if (validate.isPending || tooLong) return
     // An empty field is no answer, which the API reports as such.
-    validate.mutate(requiresAnswer && answer !== '' ? answer : undefined)
+    validate.mutate(requiresAnswer && answer !== '' ? answer : undefined, {
+      onSuccess: (result) => setAnnouncedElsewhere(announce?.(runAnnouncement(result)) ?? false),
+      onError: (error) => setAnnouncedElsewhere(announce?.(`Erro: ${error.message}`) ?? false),
+    })
   }
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -77,7 +97,7 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
         </p>
       )}
       {!validate.isPending && validate.error && (
-        <div className={styles.outcome} role="alert">
+        <div className={styles.outcome} role={live ? 'alert' : undefined}>
           <p className={styles.error}>{validate.error.message}</p>
           {validate.error.status === 0 && (
             <p className={styles.muted}>
@@ -92,62 +112,63 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
           )}
         </div>
       )}
-      {!validate.isPending && validate.data && <Outcome run={validate.data} retry={run} />}
+      {!validate.isPending && validate.data && (
+        <Outcome run={validate.data} retry={run} live={live} />
+      )}
     </section>
   )
 }
 
-// A passed run is a new completion only when the API says this run recorded it; a
-// completion recorded earlier stays whatever later runs return.
-//
-// The count of met criteria (lab/criteria.ts) comes from this run's own result, after
-// the sentence and in the same status, so it is read with it.
-function Outcome({ run, retry }: { run: ValidationRun; retry: () => void }) {
+// How a run ended, in one sentence, before the count. A passed run is a new completion
+// only when the API says this run recorded it; a completion recorded earlier stays
+// whatever later runs return.
+function outcomeSentence(run: ValidationRun, counted: boolean): string {
   const completedBefore = !run.newly_completed && run.progress.status === 'completed'
+  if (run.outcome === 'passed') {
+    if (run.newly_completed) return 'Missão concluída: o laboratório atende a todos os critérios.'
+    return `O laboratório atende a todos os critérios.${completedBefore ? ' Esta missão já estava concluída.' : ''}`
+  }
+  if (run.outcome === 'failed') {
+    if (completedBefore) {
+      return 'O laboratório não atende a todos os critérios agora. Sua conclusão desta missão continua registrada.'
+    }
+    return counted ? 'Missão ainda não concluída.' : 'Missão ainda não concluída. Veja os critérios abaixo.'
+  }
+  return 'Não foi possível verificar o laboratório agora. Isso não conta como tentativa.'
+}
+
+// What the panel says about a run, as one text: the sentence and the count of met
+// criteria (lab/criteria.ts), when there is one.
+export function runAnnouncement(run: ValidationRun): string {
   const count = run.result ? countCriteria(run.result) : null
-  const counted = count && (
-    <>
-      {' '}
-      <span className={styles.count}>{criteriaText(count)}</span>
-    </>
-  )
+  const sentence = outcomeSentence(run, count !== null)
+  return count ? `${sentence} ${criteriaText(count)}` : sentence
+}
+
+// The sentence, then the count in --dim, in one status (an alert for `error`) so they are
+// read together; without a live region when the page already announced this run.
+function Outcome({ run, retry, live }: { run: ValidationRun; retry: () => void; live: boolean }) {
+  const count = run.result ? countCriteria(run.result) : null
+  const failedToCheck = run.outcome === 'error'
+  const role = failedToCheck ? 'alert' : 'status'
   return (
     <div className={styles.outcome} data-outcome={run.outcome}>
-      {run.outcome === 'passed' && run.newly_completed && (
-        <p className={styles.passed} role="status">
-          Missão concluída: o laboratório atende a todos os critérios.{counted}
-        </p>
-      )}
-      {run.outcome === 'passed' && !run.newly_completed && (
-        <p className={styles.passed} role="status">
-          O laboratório atende a todos os critérios.
-          {completedBefore && ' Esta missão já estava concluída.'}
-          {counted}
-        </p>
-      )}
-      {run.outcome === 'failed' && !completedBefore && (
-        <p role="status">
-          {count
-            ? 'Missão ainda não concluída.'
-            : 'Missão ainda não concluída. Veja os critérios abaixo.'}
-          {counted}
-        </p>
-      )}
-      {run.outcome === 'failed' && completedBefore && (
-        <p role="status">
-          O laboratório não atende a todos os critérios agora. Sua conclusão desta missão continua
-          registrada.{counted}
-        </p>
-      )}
-      {run.outcome === 'error' && (
-        <>
-          <p className={styles.error} role="alert">
-            Não foi possível verificar o laboratório agora. Isso não conta como tentativa.{counted}
-          </p>
-          <button type="button" onClick={retry}>
-            Tentar novamente
-          </button>
-        </>
+      <p
+        className={failedToCheck ? styles.error : run.outcome === 'passed' ? styles.passed : undefined}
+        role={live ? role : undefined}
+      >
+        {outcomeSentence(run, count !== null)}
+        {count && (
+          <>
+            {' '}
+            <span className={styles.count}>{criteriaText(count)}</span>
+          </>
+        )}
+      </p>
+      {failedToCheck && (
+        <button type="button" onClick={retry}>
+          Tentar novamente
+        </button>
       )}
       {run.result && <ResultTree node={run.result} />}
     </div>
