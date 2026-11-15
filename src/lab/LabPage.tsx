@@ -28,6 +28,7 @@ import {
   useLab,
   useReplaceLab,
 } from './queries.ts'
+import { AREA_SHORTCUTS, shortcutFor } from './shortcuts.ts'
 import { type Announce, ValidationPanel } from './ValidationPanel.tsx'
 
 const stateLabel: Record<ConnectionStatus['state'], string> = {
@@ -177,6 +178,36 @@ function ReadyLab({
   // the terminal can take the focus; if nothing was inserted, the panel comes back with
   // its message.
   const historyInsert = useRef<Insert | null>(null)
+
+  // The area shortcuts (lab/shortcuts.ts): one listener for the page, in the capture
+  // phase, so it runs before xterm.js's own on its textarea and a shortcut never reaches
+  // the shell. Any other key goes on untouched. A shortcut selects its area (what a
+  // phone shows) and takes the focus there: into bash, or onto the validation or history
+  // panel. If the focus is already in that area, nothing moves.
+  const hasCriteria = lab.mission !== null
+  const terminalId = viewIds.terminal
+  const criteriaId = viewIds.criteria
+  const historyId = viewIds.history
+  useEffect(() => {
+    const ids: Record<View, string> = { terminal: terminalId, criteria: criteriaId, history: historyId }
+    const onKey = (event: KeyboardEvent) => {
+      const shortcut = shortcutFor(event)
+      if (!shortcut || (!shortcut.act && !event.repeat)) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (!shortcut.act || (shortcut.area === 'criteria' && !hasCriteria)) return
+      const area = document.getElementById(ids[shortcut.area])
+      if (!area || area.contains(document.activeElement)) return
+      flushSync(() => setView(shortcut.area))
+      const target =
+        shortcut.area === 'terminal'
+          ? area.querySelector<HTMLElement>('.xterm-helper-textarea')
+          : area.querySelector<HTMLElement>('section')
+      target?.focus()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [terminalId, criteriaId, historyId, hasCriteria])
   useEffect(() => {
     historyInsert.current = (text) => {
       flushSync(() => setView('terminal'))
@@ -293,6 +324,7 @@ function ReadyLab({
                 type="button"
                 aria-pressed={view === name}
                 aria-controls={viewIds[name]}
+                aria-keyshortcuts={AREA_SHORTCUTS[name].aria}
                 onClick={() => setView(name)}
               >
                 {viewLabel[name]}
@@ -304,6 +336,8 @@ function ReadyLab({
             id={viewIds.terminal}
             className={styles.terminal}
             aria-describedby={HISTORY_NOTICE_ID}
+            aria-keyshortcuts={AREA_SHORTCUTS.terminal.aria}
+            data-shortcut={AREA_SHORTCUTS.terminal.label}
           >
             <Terminal
               labId={lab.id}
@@ -315,12 +349,30 @@ function ReadyLab({
           </section>
           <div className={styles.side}>
             {lab.mission && (
-              <div id={viewIds.criteria} className={styles.criteria}>
-                <ValidationPanel labId={lab.id} mission={lab.mission} announce={announce} />
+              <div
+                id={viewIds.criteria}
+                className={styles.criteria}
+                data-shortcut={AREA_SHORTCUTS.criteria.label}
+              >
+                <ValidationPanel
+                  labId={lab.id}
+                  mission={lab.mission}
+                  announce={announce}
+                  shortcut={AREA_SHORTCUTS.criteria.aria}
+                />
               </div>
             )}
-            <div id={viewIds.history} className={styles.history}>
-              <HistoryPanel labId={lab.id} live insertRef={historyInsert} />
+            <div
+              id={viewIds.history}
+              className={styles.history}
+              data-shortcut={AREA_SHORTCUTS.history.label}
+            >
+              <HistoryPanel
+                labId={lab.id}
+                live
+                insertRef={historyInsert}
+                shortcut={AREA_SHORTCUTS.history.aria}
+              />
             </div>
           </div>
         </div>
