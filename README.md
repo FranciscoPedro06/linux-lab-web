@@ -46,6 +46,8 @@ The interface text is in Portuguese.
 
 The interface is a terminal screen: one monospace face (Ubuntu Sans Mono, served from this site because the Content-Security-Policy allows fonts from `'self'` only) at one size, a character grid, one background shared with xterm.js, square corners, and only the colors a terminal already has, taken from the xterm 256-color palette. Highlight is inverse video; color only marks a state (green passed, red failed, yellow in progress, blue a directory) and always comes with a word. The dark theme (`tty`, the default) and the light one (`xterm`) follow `prefers-color-scheme`, and the terminal reads its colors from the same tokens, so bash changes theme with the page.
 
+A button whose request runs is disabled, says what is happening (`Verificando…`) and shows `| / - \` turning before its label; it carries `aria-busy="true"` and the spinner has empty alternative text, so screen readers read the label only. The spinner stops under `prefers-reduced-motion: reduce`. Lab, validation and session mutations send one request however often their button is pressed (`useSingleFlight` in `src/auth/session.ts`): the button is disabled once the page renders the pending state, a task after the request starts, and a second press in between is ignored. Confirmations before discarding a lab put `[ Cancelar ]` first, with the focus, and give the focus back to the button that opened them when cancelled.
+
 The tokens are CSS variables in `src/index.css`; buttons, links, fields and hints get their terminal look there, and each page's `*.module.css` lays out panels in that style. `design/README.md` holds the design system's rules and `design/tokens.json` its tokens; change both with the CSS.
 
 ## Pages
