@@ -6,6 +6,9 @@
   margin-top: 10px;
   padding: 10px 1ch 9px;
   border: 1px solid var(--rule);
+  /* The criteria's layout follows the panel's width, not the screen's (below). */
+  container-type: inline-size;
+  overflow-wrap: anywhere;
 }
 
 .heading {
@@ -123,4 +126,26 @@
 
 .item[data-status='error'] > .badge {
   color: var(--yellow);
+}
+
+/*
+ * A narrow panel (the 44-column side column, a phone) cannot give every level a
+ * 17-column status column: two levels down only a few columns are left for the text.
+ * There the status opens the line and the text wraps under it, 2 columns in, and each
+ * level is indented by its rule and 1 column.
+ */
+@container (max-width: 60ch) {
+  .item {
+    padding-left: 2ch;
+    text-indent: -2ch;
+  }
+
+  .badge {
+    min-width: 0;
+  }
+
+  .tree .tree {
+    margin-left: 0;
+    padding-left: 1ch;
+  }
 }
