@@ -56,7 +56,8 @@ Ubuntu Sans Mono 400 and 700 from `@fontsource/ubuntu-sans-mono`, bundled with t
 | manual page (NAME-style sections, 7-column bodies) | mission | `src/catalog/MissionPage.module.css` |
 | `history` output (number right-aligned) | command history | `src/lab/HistoryPanel.module.css` (`data-seq`) |
 | status in brackets, like a boot log | validation | `src/lab/ValidationPanel.module.css` |
-| double-line box | confirmation | `src/lab/ConfirmReplace.module.css` |
+| double-line box, `[ Cancelar ]` first and focused, the focus back on the button that opened it after cancelling | confirmation | `src/lab/ConfirmReplace.tsx`, `ConfirmReplace.module.css` |
+| `\| / - \` turning before the label of a button whose request runs (`aria-busy`), still under `prefers-reduced-motion: reduce` | busy buttons | `button[aria-busy='true']::before` in `src/index.css` |
 | `# comment` | notices, field hints | `.notice`, `.hint` |
 | `[+]` / `[-]` | hints | `summary` in `src/index.css` |
 | `label: value` login prompt | login, sign-up | `.field` in `src/auth/Auth.module.css` |
@@ -80,13 +81,6 @@ A last line on `--bg-alt` with each key in inverse video and its action beside i
 - **Waits for:** the screen actually handling those keys. A bar that lists keys that do nothing is a lie.
 - **How:** first make the keys work, then show them. Prefer keys the browser already handles (`Tab`, `Enter` on a focused link or the form) and add `Esc` to go back (a `keydown` listener on `document` in the page, ignored while focus is in an `input`, a `textarea` or the terminal). Never single letters such as `q` or `t`: they fire while typing and fight screen readers. Then add a `KeyBar` component (`<ul aria-label="Atalhos de teclado">` with `<kbd>` per key) at the bottom of login, sign-up, home and the mission page. Never on the lab page: there the keyboard belongs to bash.
 
-### Busy spinner on buttons
-
-While a request runs, the button shows `| / - \` turning before its label (`| Verificando…`).
-
-- **Waits for:** nothing.
-- **How:** set `aria-busy="true"` (besides `disabled`) on buttons whose request is pending, and in `src/index.css` animate `button[aria-busy='true']::before` with a `steps(1)` keyframe that changes `content` through `'[ | '`, `'[ / '`, `'[ - '`, `'[ \\ '`. Stop it under `prefers-reduced-motion: reduce`.
-
 ### `[~]` for the mission whose lab is open
 
 In the catalog, `[x]` is done and `[ ]` is not; the design adds `[~]` in `--yellow` for the mission the student's active lab belongs to.
@@ -100,13 +94,6 @@ The design shows "Missão ainda não concluída. 2 de 3 critérios atendidos." i
 
 - **Waits for:** a decision on how to count groups (`all`, `any`, `not`): count leaf checks, or only the top level.
 - **How:** in `Outcome` (`src/lab/ValidationPanel.tsx`), walk `run.result` and count `check` nodes with `status === 'passed'`, then add the count in `--dim` after the sentence.
-
-### Cancel first in the confirmation
-
-The design puts `[ Cancelar ]` before the danger action. Today Cancelar already has the focus but comes second.
-
-- **Waits for:** nothing.
-- **How:** swap the two buttons in `src/lab/ConfirmReplace.tsx`, keeping `autoFocus` on Cancelar, and update any test that relies on their order.
 
 ### Small screens: say it instead of squeezing bash
 
