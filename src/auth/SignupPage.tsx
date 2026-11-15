@@ -95,7 +95,12 @@ export function SignupPage() {
               {signup.error.message}
             </p>
           )}
-          <button className={styles.button} type="submit" disabled={signup.isPending}>
+          <button
+            className={styles.button}
+            type="submit"
+            disabled={signup.isPending}
+            aria-busy={signup.isPending || undefined}
+          >
             {signup.isPending ? 'Criando conta…' : 'Criar conta'}
           </button>
         </form>

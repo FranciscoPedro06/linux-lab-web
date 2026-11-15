@@ -1,10 +1,12 @@
 import {
   type QueryClient,
+  type UseMutationOptions,
   type UseMutationResult,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef } from 'react'
 import {
   ApiError,
   type LoginInput,
@@ -53,7 +55,7 @@ async function sessionChanged(client: QueryClient, user: User | null) {
 export function useLogin() {
   const client = useQueryClient()
   const change = useSessionChange()
-  return useMutation<User, ApiError, LoginInput>({
+  return useSingleFlight<User, ApiError, LoginInput, unknown>({
     mutationFn: (input) =>
       change(async () => {
         const user = await login(input)
@@ -66,7 +68,7 @@ export function useLogin() {
 export function useSignup() {
   const client = useQueryClient()
   const change = useSessionChange()
-  return useMutation<User, ApiError, SignupInput>({
+  return useSingleFlight<User, ApiError, SignupInput, unknown>({
     mutationFn: (input) =>
       change(async () => {
         const user = await signup(input)
@@ -82,7 +84,7 @@ export function useSignup() {
 export function useLogout() {
   const client = useQueryClient()
   const change = useSessionChange()
-  return useMutation<void, ApiError>({
+  return useSingleFlight<void, ApiError, void, unknown>({
     mutationFn: () =>
       change(async () => {
         await logout()
@@ -123,7 +125,7 @@ export function useUserMutation<TData, TVariables>(options: {
   onError?: (error: ApiError, variables: TVariables) => void
 }): UseMutationResult<TData, ApiError, TVariables, StartedBy> {
   const client = useQueryClient()
-  return useMutation<TData, ApiError, TVariables, StartedBy>({
+  return useSingleFlight<TData, ApiError, TVariables, StartedBy>({
     mutationFn: options.mutationFn,
     retry: options.retry,
     onMutate: () => ({ userId: signedInUserId(client) }),
@@ -134,4 +136,32 @@ export function useUserMutation<TData, TVariables>(options: {
       if (stillSignedIn(client, started)) options.onError?.(error, variables)
     },
   })
+}
+
+// A mutation whose `mutate` does nothing while a request it started has not settled, so
+// a button pressed twice sends one request. The button is disabled once the page renders
+// the pending state, but TanStack Query reports that state to React a task after the
+// request starts; a second click in between would otherwise send a second request.
+// The guard is released when the mutation is seen settled (or reset), including one that
+// settled before any render showed it pending: its submittedAt changed.
+function useSingleFlight<TData, TError, TVariables, TContext>(
+  options: UseMutationOptions<TData, TError, TVariables, TContext>,
+): UseMutationResult<TData, TError, TVariables, TContext> {
+  const mutation = useMutation(options)
+  const inFlight = useRef(false)
+  const { mutate, status, submittedAt } = mutation
+
+  useEffect(() => {
+    if (status !== 'pending') inFlight.current = false
+  }, [status, submittedAt])
+
+  const once = useCallback(
+    (...args: Parameters<typeof mutate>) => {
+      if (inFlight.current) return
+      inFlight.current = true
+      mutate(...args)
+    },
+    [mutate],
+  )
+  return { ...mutation, mutate: once }
 }

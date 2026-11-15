@@ -15,7 +15,7 @@ import {
   statusLabel,
   wasReplaced,
 } from './api.ts'
-import { ConfirmReplace } from './ConfirmReplace.tsx'
+import { ConfirmReplace, useConfirmation } from './ConfirmReplace.tsx'
 import { HISTORY_NOTICE_ID, HistoryNotice, HistoryPanel } from './HistoryPanel.tsx'
 import styles from './LabPage.module.css'
 import {
@@ -133,7 +133,7 @@ function ReadyLab({
   const client = useQueryClient()
   const recheckSession = useRecheckSession()
   const end = useEndLab()
-  const [confirming, setConfirming] = useState(false)
+  const { open: confirming, opener, show, cancel, close } = useConfirmation()
   const [status, setStatus] = useState<ConnectionStatus>({ state: 'connecting' })
   const [session, setSession] = useState(0)
   const [closeRequested, setCloseRequested] = useState(false)
@@ -255,9 +255,9 @@ function ReadyLab({
           <ConfirmReplace
             title="Reiniciar o laboratório?"
             confirmLabel="Descartar e reiniciar"
-            onCancel={() => setConfirming(false)}
+            onCancel={cancel}
             onConfirm={() => {
-              setConfirming(false)
+              close()
               if (lab.mission) onReplace({ lab, missionSlug: lab.mission.slug })
             }}
           >
@@ -297,14 +297,20 @@ function ReadyLab({
           )}
           {lab.mission && (
             <button
+              ref={opener}
               type="button"
               disabled={confirming || checking || end.isPending}
-              onClick={() => setConfirming(true)}
+              onClick={show}
             >
               Reiniciar laboratório
             </button>
           )}
-          <button type="button" disabled={end.isPending} onClick={() => end.mutate(lab.id)}>
+          <button
+            type="button"
+            disabled={end.isPending}
+            aria-busy={end.isPending || undefined}
+            onClick={() => end.mutate(lab.id)}
+          >
             {end.isPending ? 'Encerrando…' : 'Encerrar laboratório'}
           </button>
         </footer>
@@ -414,6 +420,7 @@ function AfterReplacement({
                 className={styles.primary}
                 type="button"
                 disabled={create.isPending}
+                aria-busy={create.isPending || undefined}
                 onClick={() =>
                   create.mutate(missionSlug, {
                     onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),
@@ -470,6 +477,7 @@ function EndedLab({ lab }: { lab: Lab }) {
             className={styles.primary}
             type="button"
             disabled={create.isPending}
+            aria-busy={create.isPending || undefined}
             onClick={() =>
               create.mutate(mission.slug, {
                 onSuccess: (created) => navigate(`/labs/${created.id}`, { replace: true }),

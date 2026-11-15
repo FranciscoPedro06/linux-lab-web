@@ -56,6 +56,7 @@ export function HomePage() {
               className={styles.button}
               type="button"
               disabled={logout.isPending}
+              aria-busy={logout.isPending || undefined}
               onClick={() => logout.mutate()}
             >
               {logout.isPending ? 'Saindo…' : 'Sair'}
@@ -114,6 +115,7 @@ function CurrentLab() {
               className={home.inline}
               type="button"
               disabled={end.isPending}
+              aria-busy={end.isPending || undefined}
               onClick={() => end.mutate(lab.id)}
             >
               {end.isPending ? 'Encerrando…' : 'Encerrar laboratório'}

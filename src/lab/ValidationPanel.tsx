@@ -57,7 +57,11 @@ export function ValidationPanel({ labId, mission }: { labId: string; mission: La
             />
           </label>
         )}
-        <button type="submit" disabled={validate.isPending || tooLong}>
+        <button
+          type="submit"
+          disabled={validate.isPending || tooLong}
+          aria-busy={validate.isPending || undefined}
+        >
           {validate.isPending ? 'Verificando…' : 'Verificar'}
         </button>
       </form>

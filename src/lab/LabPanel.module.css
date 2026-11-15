@@ -42,6 +42,7 @@
 
 /* An action inside a sentence: underlined, no brackets. */
 .inline {
+  --open: '';
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;

@@ -109,6 +109,8 @@ a:focus-visible {
 
 /* Buttons: [ Rótulo ]. Hover and focus are inverse video, like a TUI selection. */
 button {
+  /* What comes before the label; a button without brackets sets it to ''. */
+  --open: '[ ';
   margin: 0;
   padding: 0;
   border: 0;
@@ -152,6 +154,7 @@ button:disabled {
 
 /* The form's action is the screen's primary one: an inverse block, no brackets. */
 button[type='submit'] {
+  --open: '';
   padding: 0 1ch;
   background: var(--fg);
   color: var(--bg);
@@ -177,6 +180,43 @@ button[type='submit']:disabled {
   background: var(--sel);
   color: var(--fg);
   cursor: progress;
+}
+
+/*
+ * Busy: while the button's request runs, | / - \ turns before its label, at a constant
+ * width. The page sets aria-busy (and disabled) only from the request's real state; the
+ * label already says what happens (Verificando…), so screen readers skip the spinner.
+ */
+button[aria-busy='true']::before {
+  content: var(--open) '| ';
+  content: var(--open) '| ' / '';
+  animation: busy 0.5s steps(1) infinite;
+}
+
+@keyframes busy {
+  0% {
+    content: var(--open) '| ';
+    content: var(--open) '| ' / '';
+  }
+  25% {
+    content: var(--open) '/ ';
+    content: var(--open) '/ ' / '';
+  }
+  50% {
+    content: var(--open) '- ';
+    content: var(--open) '- ' / '';
+  }
+  75% {
+    content: var(--open) '\\ ';
+    content: var(--open) '\\ ' / '';
+  }
+}
+
+/* Without motion the first frame stays: the label still says what is happening. */
+@media (prefers-reduced-motion: reduce) {
+  button[aria-busy='true']::before {
+    animation: none;
+  }
 }
 
 input {
