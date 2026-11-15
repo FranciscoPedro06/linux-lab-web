@@ -51,7 +51,7 @@ Ubuntu Sans Mono 400 and 700 from `@fontsource/ubuntu-sans-mono`, bundled with t
 | `figlet -k Linux Lab` | login, sign-up, signed-out home | `src/Banner.tsx` |
 | TUI panel, title on the border | home, lab | `.panel` in `src/lab/LabPanel.module.css`, `HistoryPanel.module.css`, `ValidationPanel.module.css` |
 | `bash` as the active panel | lab | `.terminal` in `src/lab/LabPage.module.css` |
-| one-line top bar on `--bg-alt` | lab | `.header` in `src/lab/LabPage.module.css` |
+| one-line top bar on `--bg-alt`: `linuxlab`, the user, the page's own segments, the lab's state | every screen | `src/TopBar.tsx`, `src/TopBar.module.css` |
 | `[x]` / `[ ]` listing | catalog | `src/catalog/Catalog.module.css` (`data-progress`) |
 | manual page (NAME-style sections, 7-column bodies) | mission | `src/catalog/MissionPage.module.css` |
 | `history` output (number right-aligned) | command history | `src/lab/HistoryPanel.module.css` (`data-seq`) |
@@ -79,13 +79,6 @@ A last line on `--bg-alt` with each key in inverse video and its action beside i
 
 - **Waits for:** the screen actually handling those keys. A bar that lists keys that do nothing is a lie.
 - **How:** first make the keys work, then show them. Prefer keys the browser already handles (`Tab`, `Enter` on a focused link or the form) and add `Esc` to go back (a `keydown` listener on `document` in the page, ignored while focus is in an `input`, a `textarea` or the terminal). Never single letters such as `q` or `t`: they fire while typing and fight screen readers. Then add a `KeyBar` component (`<ul aria-label="Atalhos de teclado">` with `<kbd>` per key) at the bottom of login, sign-up, home and the mission page. Never on the lab page: there the keyboard belongs to bash.
-
-### Top bar on every screen
-
-Today only the lab has the one-line bar on `--bg-alt`. The design puts it at the top of every screen: `linuxlab` in bold on the left, the user's name, and on the right the current lab's state (`lab pronto · 1h 42min`) or `sem laboratório ativo`.
-
-- **Waits for:** nothing; it is layout work.
-- **How:** move the lab's `.header` into a shared `TopBar` component that takes left and right segments, read the current lab with `useCurrentLab` for the right side, and render it first in each page's `<main>`. Keep one bar per screen.
 
 ### Busy spinner on buttons
 
