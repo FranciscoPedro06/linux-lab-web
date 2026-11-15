@@ -70,6 +70,15 @@ The lab keeps bash first at every width (`src/lab/LabPage.module.css`).
 - **Below 64rem:** the side column moves under bash, which keeps a fixed height (`max(28rem, 55vh)`); the page scrolls to the validation and the history.
 - **Below 40rem (a phone):** one area at a time, chosen in a line of three buttons under the top bar: `[Terminal]` `[Critérios]` `[Histórico]`, the shown one in inverse video, focus as a line around the button (and `--sel` on another area). Bash is shown first and fills the screen under the bar. The other areas stay mounted and hidden with `display: none`: switching never closes the terminal's connection or drops its output, and xterm.js fits itself again when shown (its `ResizeObserver`), sending only a resize. Inserting a command from the history shows bash. The notice about recorded commands follows the areas instead of pushing bash down. Buttons there are 44px tall.
 
+## Keyboard on the lab page
+
+The keyboard belongs to bash, with three exceptions that only move between the lab's areas (`src/lab/shortcuts.ts`): `Ctrl+Shift+1` Terminal, `Ctrl+Shift+2` Critérios, `Ctrl+Shift+3` Histórico. Nothing else is taken: no shortcut runs a command, resets or ends the lab, or confirms anything.
+
+- **Why these keys.** Read by position (`event.code`), the same on every layout. Single letters fire while typing. `Alt+digit` switches tabs in Chrome and Firefox on Linux and is readline's numeric argument. `Ctrl+Alt` is AltGr (ABNT2 types `¹ ² ³` with it). `Ctrl+digit` switches tabs or desktops, and `Cmd+Shift+3` takes a screenshot on macOS. `Ctrl+Shift+digit` has no default in those browsers and systems. The cost in bash: `Ctrl+Shift+2` no longer sends NUL (`Ctrl+@`); `Ctrl+Space` still does.
+- **How they are caught.** One `keydown` listener for the page, in the capture phase, so it runs before xterm.js's own and a shortcut never reaches the shell. Every other key goes on untouched. A shortcut does not act, and is not taken, while text is composed (IME), in a text field other than the terminal, or inside a dialog. Held down (auto-repeat), it does not act again but is still kept from the shell.
+- **What they do.** Select the area (what the phone shows) and take the focus there: into bash, or onto the validation or history panel, whose border then turns `--fg` like the active panel. When the focus is already in that area, nothing moves.
+- **Where they are shown.** On the right of each panel's top border, in `--dim` (`Ctrl+Shift+2`), from the same table the keys are read with. Shown from 40rem with a fine pointer and hover; hidden on touch screens and on a phone, where the switcher is the way. The labels are drawn with empty alternative text; the panels and the switcher's buttons carry `aria-keyshortcuts`.
+
 ## Motion
 
 Only what a terminal does. The cursor blinks in xterm.js; nothing else moves.
@@ -83,7 +92,7 @@ The design system has these; the app does not yet. Each one waits for something,
 A last line on `--bg-alt` with each key in inverse video and its action beside it: `Enter entrar   Tab próximo campo`.
 
 - **Waits for:** the screen actually handling those keys. A bar that lists keys that do nothing is a lie.
-- **How:** first make the keys work, then show them. Prefer keys the browser already handles (`Tab`, `Enter` on a focused link or the form) and add `Esc` to go back (a `keydown` listener on `document` in the page, ignored while focus is in an `input`, a `textarea` or the terminal). Never single letters such as `q` or `t`: they fire while typing and fight screen readers. Then add a `KeyBar` component (`<ul aria-label="Atalhos de teclado">` with `<kbd>` per key) at the bottom of login, sign-up, home and the mission page. Never on the lab page: there the keyboard belongs to bash.
+- **How:** first make the keys work, then show them. Prefer keys the browser already handles (`Tab`, `Enter` on a focused link or the form) and add `Esc` to go back (a `keydown` listener on `document` in the page, ignored while focus is in an `input`, a `textarea` or the terminal). Never single letters such as `q` or `t`: they fire while typing and fight screen readers. Then add a `KeyBar` component (`<ul aria-label="Atalhos de teclado">` with `<kbd>` per key) at the bottom of login, sign-up, home and the mission page. Not on the lab page: there the keyboard belongs to bash, except for the area shortcuts above, which its panels show.
 
 ### `[~]` for the mission whose lab is open
 
