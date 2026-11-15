@@ -226,3 +226,13 @@ summary:focus-visible {
   background: var(--fg);
   color: var(--bg);
 }
+
+/* Read by screen readers, not drawn. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
