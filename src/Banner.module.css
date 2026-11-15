@@ -1,0 +1,27 @@
+.banner {
+  margin: 0;
+}
+
+/* The one exception to the single size: figlet output, as if zoomed in only there. */
+.art {
+  display: block;
+  font-size: 20px;
+  line-height: 22px;
+  white-space: pre;
+}
+
+.name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .art {
+    font-size: 12px;
+    line-height: 14px;
+  }
+}

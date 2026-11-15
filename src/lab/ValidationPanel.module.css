@@ -1,67 +1,44 @@
 .panel {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-height: 40vh;
-  overflow-y: auto;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 1ch 9px;
+  border: 1px solid var(--rule);
 }
 
 .heading {
+  position: absolute;
+  top: -11px;
+  left: 1ch;
   margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 0 1ch;
+  background: var(--bg);
+  text-transform: lowercase;
 }
 
 .form {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .answer {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 12rem;
-  font-size: 0.875rem;
-}
-
-.answer input {
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-}
-
-.panel button {
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.panel button:disabled {
-  color: var(--text-muted);
-  cursor: progress;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-self: stretch;
+  column-gap: 1ch;
+  color: var(--dim);
+  text-transform: lowercase;
 }
 
 .outcome {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: 10px;
 }
 
 .outcome p,
@@ -70,46 +47,74 @@
 }
 
 .passed {
-  color: var(--ok);
-  font-weight: 600;
+  color: var(--green);
+  font-weight: 700;
 }
 
 .error {
   margin: 0;
-  color: var(--error);
-  font-size: 0.875rem;
+  color: var(--fg);
+}
+
+.error::before {
+  content: 'erro: ';
+  color: var(--red);
+  font-weight: 700;
 }
 
 .muted {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--dim);
 }
 
+/* Each condition with its status in brackets, like a boot log. */
 .tree {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
   margin: 0;
-  padding-left: 1rem;
+  padding: 0;
   list-style: none;
 }
 
+.tree .tree {
+  margin: 0 0 0 1ch;
+  padding-left: 2ch;
+  border-left: 1px solid var(--rule);
+}
+
 .item {
-  font-size: 0.875rem;
+  padding-left: 17ch;
+  text-indent: -17ch;
+}
+
+.item .tree {
+  text-indent: 0;
 }
 
 .badge {
   display: inline-block;
-  min-width: 7.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
+  min-width: 16ch;
+  text-indent: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: '[';
+  color: var(--fg);
+}
+
+.badge::after {
+  content: ']';
+  color: var(--fg);
 }
 
 .item[data-status='passed'] > .badge {
-  color: var(--ok);
+  color: var(--green);
 }
 
-.item[data-status='failed'] > .badge,
+.item[data-status='failed'] > .badge {
+  color: var(--red);
+}
+
 .item[data-status='error'] > .badge {
-  color: var(--error);
+  color: var(--yellow);
 }

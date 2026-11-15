@@ -1,35 +1,71 @@
 .module {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  margin-top: var(--row);
+}
+
+.module:first-of-type {
+  margin-top: 0;
 }
 
 .module p {
   margin: 0;
 }
 
-.moduleTitle {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+.module > p::before {
+  content: '# ';
 }
 
+.moduleTitle {
+  margin: 0;
+}
+
+/* Each mission is a listing row: [x] done, [ ] not yet. */
 .missions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin: 0.25rem 0 0;
-  padding-left: 1.25rem;
-  font-size: 0.875rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.missions li {
+  position: relative;
+  padding: 0 1ch 0 5ch;
+}
+
+.missions li::before {
+  position: absolute;
+  left: 1ch;
+  content: '[ ]';
+  content: '[ ]' / '';
+  color: var(--dim);
+  white-space: pre;
+}
+
+.missions li[data-progress='completed']::before {
+  content: '[x]';
+  content: '[x]' / '';
+  color: var(--green);
+}
+
+.missions li:hover,
+.missions li:focus-within {
+  background: var(--sel);
+}
+
+.missions li:hover a,
+.missions li:focus-within a {
+  color: var(--bright);
 }
 
 .summary,
 .meta {
   display: block;
-  color: var(--text-muted);
+  color: var(--dim);
 }
 
-.meta {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
+.missions li:hover .summary,
+.missions li:focus-within .summary,
+.missions li:hover .meta,
+.missions li:focus-within .meta {
+  color: var(--fg);
 }

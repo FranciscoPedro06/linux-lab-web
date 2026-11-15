@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
+import { Banner } from '../Banner.tsx'
 import styles from './Auth.module.css'
 import { useAuth, useLogin } from './session.ts'
 
@@ -19,7 +20,7 @@ export function LoginPage() {
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>Linux Lab</h1>
+      <Banner />
       <form className={styles.form} onSubmit={submit} aria-labelledby="login-heading">
         <h2 id="login-heading" className={styles.heading}>
           Entrar

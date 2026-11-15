@@ -1,82 +1,82 @@
+/* A tty login screen, anchored top-left like a terminal session. */
 .page {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  max-width: 24rem;
-  margin: 0 auto;
-  padding: 3rem 1rem;
+  align-items: flex-start;
+  gap: var(--row);
+  max-width: calc(var(--width-80) + 8ch);
+  margin: 0;
+  padding: calc(var(--row) * 2) 4ch;
+}
+
+.page p {
+  margin: 0;
 }
 
 .title {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
 }
 
 .heading {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
+  margin: 0 0 var(--row);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  width: 100%;
+  max-width: var(--width-48);
 }
 
+/* label: value, as a login prompt. */
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.875rem;
-}
-
-.field input {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 1rem;
+  display: grid;
+  grid-template-columns: 10ch minmax(0, 1fr);
+  column-gap: 1ch;
+  color: var(--dim);
+  text-transform: lowercase;
 }
 
 .hint {
-  color: var(--text-muted);
-  font-size: 0.8rem;
+  grid-column: 2;
+  color: var(--dim);
+  text-transform: none;
+}
+
+.hint::before {
+  content: '# ';
 }
 
 .error {
   margin: 0;
-  color: var(--error);
-  font-size: 0.875rem;
+  color: var(--fg);
+}
+
+.error::before {
+  content: 'erro: ';
+  color: var(--red);
+  font-weight: 700;
+}
+
+.form .error {
+  margin-top: var(--row);
 }
 
 .button {
   align-self: flex-start;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.9rem;
-  cursor: pointer;
 }
 
-.button:disabled {
-  color: var(--text-muted);
-  cursor: progress;
+.form .button {
+  margin: var(--row) 0 0 11ch;
 }
 
 .muted {
   margin: 0;
-  color: var(--text-muted);
-  font-size: 0.875rem;
+  color: var(--dim);
 }
 
 .links {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0 2ch;
 }

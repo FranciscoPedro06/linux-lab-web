@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import styles from './auth/Auth.module.css'
+import { Banner } from './Banner.tsx'
 import { useAuth, useLogout } from './auth/session.ts'
 import { Catalog } from './catalog/Catalog.tsx'
 import { endReasonMessage, type Lab, statusLabel } from './lab/api.ts'
@@ -13,8 +14,8 @@ export function HomePage() {
   const logout = useLogout()
 
   return (
-    <main className={styles.page}>
-      <h1 className={styles.title}>Linux Lab</h1>
+    <main className={home.page}>
+      {auth.status === 'anonymous' ? <Banner /> : <h1 className={styles.title}>Linux Lab</h1>}
       {auth.status === 'loading' && (
         <p className={styles.muted} role="status">
           Carregando…

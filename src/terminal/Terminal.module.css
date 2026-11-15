@@ -1,9 +1,5 @@
+/* The panel around it draws the border; bash sits on the page's own background. */
 .terminal {
   height: 100%;
   min-height: 20rem;
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #16181a;
-  box-sizing: border-box;
 }

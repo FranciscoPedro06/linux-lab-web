@@ -1,24 +1,30 @@
+/* A double-line box: the only place where danger is red. */
 .confirm {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-width: 40rem;
-  padding: 1rem;
-  border: 1px solid var(--error);
-  border-radius: 6px;
-  background: var(--surface);
+  gap: var(--row);
+  max-width: 64ch;
+  margin-top: 12px;
+  padding: var(--row) 2ch 10px;
+  border: 3px double var(--red);
+  background: var(--bg);
 }
 
 .title {
+  position: absolute;
+  top: -12px;
+  left: 2ch;
   margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 0 1ch;
+  background: var(--bg);
+  color: var(--red);
 }
 
 .description {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--row);
 }
 
 .description p {
@@ -28,21 +34,27 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.actions button {
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
+  gap: 0 2ch;
 }
 
 .actions .danger {
-  border-color: var(--error);
-  color: var(--error);
+  color: var(--red);
+}
+
+.actions .danger::before,
+.actions .danger::after {
+  color: var(--red);
+}
+
+.actions .danger:hover,
+.actions .danger:focus-visible {
+  background: var(--red);
+  color: var(--bg);
+}
+
+.actions .danger:hover::before,
+.actions .danger:hover::after,
+.actions .danger:focus-visible::before,
+.actions .danger:focus-visible::after {
+  color: inherit;
 }

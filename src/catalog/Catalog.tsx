@@ -67,7 +67,7 @@ function Module({ module }: { module: CatalogModule }) {
 
 function Mission({ mission }: { mission: MissionCard }) {
   return (
-    <li>
+    <li data-progress={mission.progress.status}>
       <Link to={`/missions/${mission.slug}`}>{mission.title}</Link>{' '}
       <Completion progress={mission.progress} currentVersion={mission.version} />
       <span className={catalog.summary}>{mission.summary}</span>
