@@ -1,5 +1,11 @@
-/* The lab fills the screen: the top bar (src/TopBar.tsx), bash, and a 44-column side
-   column. */
+/*
+ * The lab fills the screen: the top bar (src/TopBar.tsx), bash, and a 44-column side
+ * column with the validation and the history.
+ * - Below 64rem the side column moves under bash, which keeps a fixed height.
+ * - Below 40rem (a phone) one area is shown at a time, chosen in the `.views` line;
+ *   bash comes first. The others stay mounted, hidden: the terminal keeps its
+ *   connection, its output and its xterm.js instance, and fits itself again when shown.
+ */
 .screen {
   display: flex;
   flex-direction: column;
@@ -92,6 +98,29 @@
   flex: 1;
 }
 
+.criteria,
+.history {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.history > * {
+  flex: 1;
+}
+
+/* Long messages, paths and commands wrap inside their panel, never past the screen. */
+.side,
+.actions {
+  overflow-wrap: anywhere;
+}
+
+/* The phone's area switcher: hidden where every area fits. */
+.views {
+  display: none;
+}
+
 @media (max-width: 64rem) {
   .screen {
     height: auto;
@@ -103,7 +132,83 @@
   }
 
   .terminal {
-    height: 28rem;
+    height: max(28rem, 55vh);
+  }
+}
+
+@media (max-width: 40rem) {
+  .page {
+    padding: 0 1ch 10px;
+  }
+
+  /* One line of three buttons, the shown area in inverse video, tall enough to tap. */
+  .views {
+    display: flex;
+    gap: 0 1ch;
+  }
+
+  .views button {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  /* [Terminal] [Critérios] [Histórico]: tight brackets, so the line fits 320px. */
+  .views button::before {
+    content: '[';
+  }
+
+  .views button::after {
+    content: ']';
+  }
+
+  .views button[aria-pressed='true'] {
+    background: var(--fg);
+    color: var(--bg);
+    font-weight: 700;
+  }
+
+  .views button[aria-pressed='true']::before,
+  .views button[aria-pressed='true']::after {
+    color: inherit;
+  }
+
+  /* The shown area is inverse video; focus is a line around the button, and on another
+     area the selection row colour, so focus never looks like the shown area. */
+  .views button:hover:not([aria-pressed='true']),
+  .views button:focus-visible:not([aria-pressed='true']) {
+    background: var(--sel);
+    color: var(--bright);
+  }
+
+  .views button:focus-visible {
+    outline: 1px solid var(--fg);
+    outline-offset: 2px;
+  }
+
+  /* bash takes the screen under the bar and the switcher; the page scrolls to the rest. */
+  .terminal {
+    height: max(16rem, calc(100dvh - 10rem));
+  }
+
+  .workspace[data-view='terminal'] .side,
+  .workspace:not([data-view='terminal']) .terminal,
+  .workspace[data-view='criteria'] .history,
+  .workspace[data-view='history'] .criteria {
+    display: none;
+  }
+
+  /* The notice about recorded commands follows the areas instead of pushing bash down. */
+  .page > [role='note'] {
+    order: 1;
+  }
+
+  .actions {
+    gap: 0 1ch;
+  }
+
+  .actions button {
+    min-height: 44px;
   }
 }
 
