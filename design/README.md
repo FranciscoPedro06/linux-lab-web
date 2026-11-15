@@ -64,7 +64,11 @@ Ubuntu Sans Mono 400 and 700 from `@fontsource/ubuntu-sans-mono`, bundled with t
 
 ## Small screens
 
-The lab wants 80 columns. Below 64rem the side column moves under bash, and bash keeps a fixed height. What a phone should get is in the last item below.
+The lab keeps bash first at every width (`src/lab/LabPage.module.css`).
+
+- **64rem and up:** bash and the 44-column side column, as above. The criteria lay themselves out by the width of their panel (a container query in `ValidationPanel.module.css`): below 60 columns the status opens the line and the text wraps under it, 2 columns in, so nested criteria keep their text width.
+- **Below 64rem:** the side column moves under bash, which keeps a fixed height (`max(28rem, 55vh)`); the page scrolls to the validation and the history.
+- **Below 40rem (a phone):** one area at a time, chosen in a line of three buttons under the top bar: `[Terminal]` `[Critérios]` `[Histórico]`, the shown one in inverse video, focus as a line around the button (and `--sel` on another area). Bash is shown first and fills the screen under the bar. The other areas stay mounted and hidden with `display: none`: switching never closes the terminal's connection or drops its output, and xterm.js fits itself again when shown (its `ResizeObserver`), sending only a resize. Inserting a command from the history shows bash. The notice about recorded commands follows the areas instead of pushing bash down. Buttons there are 44px tall.
 
 ## Motion
 
@@ -87,10 +91,3 @@ In the catalog, `[x]` is done and `[ ]` is not; the design adds `[~]` in `--yell
 
 - **Waits for:** nothing; the data is already there.
 - **How:** in `src/catalog/Catalog.tsx`, read `useCurrentLab()` and give the mission's `<li>` a `data-active` attribute when `lab.mission.slug` matches. Add `.missions li[data-active]::before { content: '[~]'; color: var(--yellow) }` in `Catalog.module.css`, and say "laboratório aberto" in text for screen readers.
-
-### Small screens: say it instead of squeezing bash
-
-Below 64rem the side column already moves under bash. On a phone the design wants the lab page to say the terminal needs a bigger screen and a keyboard.
-
-- **Waits for:** a decision on the width (about 40rem) and on whether to still allow opening the terminal there.
-- **How:** in `src/lab/LabPage.module.css`, under that width hide the workspace and show a `.small` notice from `LabPage.tsx`: "O terminal precisa de uma tela maior e de um teclado. Abra este laboratório no computador." Keep the validation and history panels reachable.
