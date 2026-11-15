@@ -1,44 +1,73 @@
-.panel {
+/* The signed-in home: one 80-column screen of panels. */
+.page {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  align-items: stretch;
+  gap: var(--row);
+  max-width: calc(var(--width-80) + 8ch);
+  margin: 0;
+  padding: calc(var(--row) * 2) 4ch;
+}
+
+.page > p {
+  margin: 0;
+}
+
+.page > button {
+  align-self: flex-start;
+}
+
+/* A TUI panel: a one-pixel line with the title cutting its top border. */
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  padding: 10px 1ch 9px;
+  border: 1px solid var(--rule);
+}
+
+.panel > h2:first-child {
+  position: absolute;
+  top: -11px;
+  left: 1ch;
+  padding: 0 1ch;
+  background: var(--bg);
+  text-transform: lowercase;
 }
 
 .panel p {
   margin: 0;
 }
 
+/* An action inside a sentence: underlined, no brackets. */
 .inline {
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
   text-decoration: underline;
-  cursor: pointer;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
-.inline:disabled {
-  color: var(--text-muted);
-  cursor: progress;
+.inline::before,
+.inline::after {
+  content: none;
 }
 
 .list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 0.875rem;
+}
+
+.list li + li {
+  margin-top: 10px;
 }
 
 .when {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--dim);
 }
 
 .reason {
   display: block;
-  color: var(--text-muted);
+  padding-left: 2ch;
+  color: var(--dim);
 }

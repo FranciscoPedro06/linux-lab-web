@@ -247,9 +247,11 @@ function ReadyLab({
             insertRef={insertRef}
           />
         </section>
-        <HistoryPanel labId={lab.id} live insertRef={insertRef} />
+        <div className={styles.side}>
+          {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
+          <HistoryPanel labId={lab.id} live insertRef={insertRef} />
+        </div>
       </div>
-      {lab.mission && <ValidationPanel labId={lab.id} mission={lab.mission} />}
       {confirming && lab.mission && (
         <ConfirmReplace
           title="Reiniciar o laboratório?"

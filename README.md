@@ -42,6 +42,12 @@ Planned, not implemented yet: the explanation and solutions after completion (a 
 
 The interface text is in Portuguese.
 
+## Interface
+
+The interface is a terminal screen: one monospace face (Ubuntu Sans Mono, served from this site because the Content-Security-Policy allows fonts from `'self'` only) at one size, a character grid, one background shared with xterm.js, square corners, and only the colors a terminal already has, taken from the xterm 256-color palette. Highlight is inverse video; color only marks a state (green passed, red failed, yellow in progress, blue a directory) and always comes with a word. The dark theme (`tty`, the default) and the light one (`xterm`) follow `prefers-color-scheme`, and the terminal reads its colors from the same tokens, so bash changes theme with the page.
+
+The tokens are CSS variables in `src/index.css`; buttons, links, fields and hints get their terminal look there, and each page's `*.module.css` lays out panels in that style. `design/README.md` holds the design system's rules and `design/tokens.json` its tokens; change both with the CSS.
+
 ## Pages
 
 | Route | Contents | Status |
@@ -95,7 +101,7 @@ Both call `POST /api/labs/{id}/replace` with `{ "mission_slug": ... }`: the lab'
 
 ## Validation
 
-The validation panel sits on `/labs/:id`, below the terminal, so the student checks the lab without leaving it. `validateLab` in `src/lab/api.ts` calls `POST /api/labs/{id}/validate`; `useValidateLab` in `src/lab/queries.ts` runs it as a TanStack Query mutation with no automatic retry. Nothing is validated automatically: the request is sent only when the student presses "Verificar", the button is disabled while it runs, and a failed request is repeated only from an explicit "Tentar novamente".
+The validation panel sits on `/labs/:id`, next to the terminal and above the command history, so the student checks the lab without leaving it. `validateLab` in `src/lab/api.ts` calls `POST /api/labs/{id}/validate`; `useValidateLab` in `src/lab/queries.ts` runs it as a TanStack Query mutation with no automatic retry. Nothing is validated automatically: the request is sent only when the student presses "Verificar", the button is disabled while it runs, and a failed request is repeated only from an explicit "Tentar novamente".
 
 The body is `{}`, or `{ "answer": ... }` when the mission expects an answer and the field is not empty (an empty field is sent as no answer, which the API reports as such): the panel reads `requires_answer` from `GET /api/missions/{slug}`, which the API answers at the lab's version, and shows the answer field only then. Answers longer than the API's limit (1024 bytes in UTF-8) are refused before sending. The client sends nothing else; the mission version, conditions and limits come from the server.
 

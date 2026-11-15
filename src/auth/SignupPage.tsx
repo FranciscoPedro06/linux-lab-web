@@ -1,5 +1,6 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
+import { Banner } from '../Banner.tsx'
 import type { SignupInput } from './api.ts'
 import styles from './Auth.module.css'
 import { useAuth, useSignup } from './session.ts'
@@ -32,7 +33,7 @@ export function SignupPage() {
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>Linux Lab</h1>
+      <Banner />
       <form className={styles.form} onSubmit={submit} aria-labelledby="signup-heading">
         <h2 id="signup-heading" className={styles.heading}>
           Criar conta

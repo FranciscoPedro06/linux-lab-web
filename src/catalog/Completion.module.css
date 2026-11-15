@@ -1,12 +1,22 @@
 .completion {
-  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .badge {
-  color: var(--ok);
-  font-weight: 600;
+  color: var(--green);
+  text-transform: lowercase;
+}
+
+.badge::before {
+  content: '[';
+  color: var(--dim);
+}
+
+.badge::after {
+  content: ']';
+  color: var(--dim);
 }
 
 .version {
-  color: var(--text-muted);
+  color: var(--dim);
 }

@@ -1,33 +1,228 @@
-:root {
-  --bg: #fafafa;
-  --text: #1a1a1a;
-  --text-muted: #5c5c5c;
-  --surface: #ffffff;
-  --border: #d4d4d4;
-  --ok: #1f7a3a;
-  --error: #b42318;
-  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'Cascadia Mono', 'DejaVu Sans Mono', monospace;
+/*
+ * Linux Lab: the interface is a terminal screen. One monospace face at one size, a
+ * character grid, one surface, square corners, and only the colors a terminal already
+ * has. Values are entries of the xterm 256-color palette (index in each comment).
+ * The design system's rules are in design/README.md.
+ */
 
-  color-scheme: light dark;
+:root {
+  /* tty: the Linux console. Default, and when the system prefers dark. */
+  --bg: #000000; /* 16: page, panels and the xterm.js background */
+  --bg-alt: #1c1c1c; /* 234: the top bar and text fields */
+  --sel: #262626; /* 235: the row under the pointer or selected; never dim text on it */
+  --rule: #444444; /* 238: borders of inactive panels */
+  --fg: #bcbcbc; /* 250: text, the block cursor, inverse-video background */
+  --bright: #ffffff; /* 231: bold text the terminal brightens */
+  --dim: #8a8a8a; /* 245: comments, metadata, times, brackets */
+  --green: #00af00; /* 34: passed, completed, connected, the prompt's user@host */
+  --red: #ff5f5f; /* 203: failed, error, disconnected, danger inside a confirmation */
+  --yellow: #ffd700; /* 220: in progress */
+  --blue: #5f87ff; /* 69: the prompt's directory */
+  --cyan: #00d7d7; /* 44: inside bash only */
+  --magenta: #d75fd7; /* 170: inside bash only */
+
+  --font-mono: 'Ubuntu Sans Mono', ui-monospace, 'DejaVu Sans Mono', monospace;
+  --row: 20px;
+  --width-80: 80ch;
+  --width-48: 48ch;
+  --width-44: 44ch;
+
+  color-scheme: dark light;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
+  /* xterm: white with black text, as xterm runs unconfigured. */
   :root {
-    --bg: #111213;
-    --text: #e6e6e6;
-    --text-muted: #9a9a9a;
-    --surface: #1c1e20;
-    --border: #34373a;
-    --ok: #5cc27a;
-    --error: #f07064;
+    --bg: #ffffff; /* 231 */
+    --bg-alt: #eeeeee; /* 255 */
+    --sel: #e4e4e4; /* 254 */
+    --rule: #bcbcbc; /* 250 */
+    --fg: #000000; /* 16 */
+    --bright: #000000; /* 16 */
+    --dim: #6c6c6c; /* 242 */
+    --green: #005f00; /* 22 */
+    --red: #af0000; /* 124 */
+    --yellow: #875f00; /* 94 */
+    --blue: #0000af; /* 19 */
+    --cyan: #005f5f; /* 23 */
+    --magenta: #870087; /* 90 */
   }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  line-height: 1.5;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: var(--row);
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* One size: headings differ by weight and brightness only. */
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+  color: var(--bright);
+}
+
+code,
+pre,
+kbd {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--bright);
+}
+
+a:focus-visible {
+  outline: none;
+  background: var(--fg);
+  color: var(--bg);
+  text-decoration: none;
+}
+
+/* Buttons: [ Rótulo ]. Hover and focus are inverse video, like a TUI selection. */
+button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  line-height: var(--row);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button::before {
+  content: '[ ';
+  color: var(--dim);
+}
+
+button::after {
+  content: ' ]';
+  color: var(--dim);
+}
+
+button:hover:not(:disabled),
+button:focus-visible {
+  outline: none;
+  background: var(--fg);
+  color: var(--bg);
+}
+
+button:hover:not(:disabled)::before,
+button:hover:not(:disabled)::after,
+button:focus-visible::before,
+button:focus-visible::after {
+  color: inherit;
+}
+
+button:disabled {
+  color: var(--dim);
+  cursor: not-allowed;
+}
+
+/* The form's action is the screen's primary one: an inverse block, no brackets. */
+button[type='submit'] {
+  padding: 0 1ch;
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+button[type='submit']::before,
+button[type='submit']::after {
+  content: none;
+}
+
+button[type='submit']:hover:not(:disabled) {
+  background: var(--bright);
+}
+
+button[type='submit']:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
+  background: var(--fg);
+}
+
+button[type='submit']:disabled {
+  background: var(--sel);
+  color: var(--fg);
+  cursor: progress;
+}
+
+input {
+  width: 100%;
+  height: var(--row);
+  margin: 0;
+  padding: 0 1ch;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-alt);
+  color: var(--fg);
+  font: inherit;
+  text-transform: none;
+  caret-color: var(--fg);
+}
+
+input:focus {
+  outline: 1px solid var(--fg);
+  outline-offset: 0;
+}
+
+/* Hints: [+] closed, [-] open. */
+summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before {
+  content: '[+] ';
+  color: var(--dim);
+}
+
+details[open] > summary::before {
+  content: '[-] ';
+}
+
+summary:hover {
+  color: var(--bright);
+}
+
+summary:focus-visible {
+  outline: none;
+  background: var(--fg);
+  color: var(--bg);
 }
